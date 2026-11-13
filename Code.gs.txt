@@ -1,0 +1,88 @@
+/** NIMEX Car Inspection Monthly API
+ *  ผูกกับ Google Sheet ใหม่ชื่อ "NIMEX Car Inspection Monthly Database" (Extensions > Apps Script) แล้ววางโค้ดนี้ทั้งหมด
+ *  Script Properties (Project Settings > Script Properties):
+ *    INSPECT_KEY  รหัสผู้ตรวจ (ใช้ร่วมกันทุก DC)
+ *    ADMIN_KEY    รหัสผู้ดูแล
+ *    CAR_API      ลิงก์ Web app ของ NIMEX Car Performance Dashboard (ใช้ดึงรายชื่อรถและ DC)
+ *    PHOTO_FOLDER_ID  (ไม่ต้องใส่) ระบบสร้างโฟลเดอร์รูปใน Google Drive ให้เองตอนอัปโหลดครั้งแรก
+ *  รหัสไม่ถูกเก็บในไฟล์นี้ */
+var COLS=['id','month','plate','dc','type','grp','inspector','mile','status','result','checks','tyres','issue','photos','created','updated','by'];
+var TABS={rec:{name:'Inspections',cols:COLS},cars:{name:'Cars',cols:['plate','type','year','dc','grp']},dcs:{name:'DCs',cols:['dc','name','zone']},log:{name:'Log',cols:['time','who','action','detail']}};
+var TZ='Asia/Bangkok';
+function props_(){return PropertiesService.getScriptProperties()}
+function ss_(){return SpreadsheetApp.getActiveSpreadsheet()}
+function tab_(k){var d=TABS[k],s=ss_(),t=s.getSheetByName(d.name);if(!t){t=s.insertSheet(d.name);t.getRange(1,1,t.getMaxRows(),d.cols.length).setNumberFormat('@');t.getRange(1,1,1,d.cols.length).setValues([d.cols]).setFontWeight('bold');t.setFrozenRows(1)}return t}
+function read_(k){var t=tab_(k),n=t.getLastRow(),w=TABS[k].cols.length;return n<2?[]:t.getRange(2,1,n-1,w).getDisplayValues()}
+function writeAll_(k,rows){var t=tab_(k),n=t.getLastRow(),w=TABS[k].cols.length;if(n>1)t.getRange(2,1,n-1,w).clearContent();if(!rows.length)return;var r=t.getRange(2,1,rows.length,w);r.setNumberFormat('@');r.setValues(rows)}
+function json_(o){return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON)}
+function now_(){return Utilities.formatDate(new Date(),TZ,"yyyy-MM-dd'T'HH:mm:ss")}
+function log_(who,a,d){var t=tab_('log'),r=t.getRange(t.getLastRow()+1,1,1,4);r.setNumberFormat('@');r.setValues([[now_(),String(who||''),a,String(d||'').slice(0,500)]])}
+function parse_(s,def){try{return s?JSON.parse(s):def}catch(e){return def}}
+
+/* ---------- รายชื่อรถจาก Car Performance Dashboard ---------- */
+function cars_(force){var c=CacheService.getScriptCache();if(!force){var hit=c.get('cars-v1');if(hit)return JSON.parse(hit)}
+ var out=null,url=props_().getProperty('CAR_API');
+ if(url){try{var r=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:true});if(r.getResponseCode()===200){var j=JSON.parse(r.getContentText());
+  if(j.cars&&j.cars.length){out={cars:j.cars.map(function(x){return[String(x[0]),String(x[1]),String(x[2]),String(x[3]),String(x[5]||'')]}),dcs:(j.dcs||[]).map(function(x){return[String(x[0]),String(x[1]),String(x[2])]}),from:'api'};
+   writeAll_('cars',out.cars);writeAll_('dcs',out.dcs)}}}catch(e){}}
+ if(!out)out={cars:read_('cars'),dcs:read_('dcs'),from:'sheet'};
+ try{c.put('cars-v1',JSON.stringify(out),21600)}catch(e){}
+ return out}
+
+/* ---------- ข้อมูลการตรวจ ---------- */
+var JSONCOLS={checks:1,tyres:1,issue:1,photos:1};
+function toObj_(r){var o={};COLS.forEach(function(k,i){o[k]=JSONCOLS[k]?parse_(r[i],{}):r[i]});return o}
+function toRow_(o){return COLS.map(function(k){var v=o[k];if(JSONCOLS[k])return JSON.stringify(v||{});return v==null?'':String(v)})}
+/* รูปเก็บเป็น "d:<fileId>" หรือ "d:<fileId>#pdf" */
+function fileIds_(p){var ids=[];for(var k in (p||{})){var v=p[k];(Array.isArray(v)?v:[v]).forEach(function(x){if(x&&typeof x==='string'&&x.indexOf('d:')===0)ids.push(x.slice(2).split('#')[0])})}return ids}
+function oldTyre_(t){var max=+(props_().getProperty('TYRE_MAX_YEARS')||5),n=new Date();for(var k in (t||{})){var s=String(t[k]||'');if(!/^\d{4}$/.test(s))continue;var wk=+s.slice(0,2),yr=2000+(+s.slice(2));var d=new Date(yr,0,1+(wk-1)*7);if((n-d)/31557600000>=max)return 1}return 0}
+
+function publicData_(){var cs=cars_(false),st=read_('rec').map(function(r){var o=toObj_(r);var bad=0;for(var k in o.checks){if(o.checks[k]&&o.checks[k].v==='bad')bad++}return[o.month,o.plate,o.status,o.result,oldTyre_(o.tyres),bad]});
+ return{cars:cs.cars,dcs:cs.dcs,st:st,now:now_()}}
+
+function doGet(){return json_(publicData_())}
+
+/* ---------- รูปภาพใน Google Drive ---------- */
+function root_(){var p=props_(),id=p.getProperty('PHOTO_FOLDER_ID');if(id){try{return DriveApp.getFolderById(id)}catch(e){}}
+ var f=DriveApp.createFolder('NIMEX Car Inspection Monthly Photos');p.setProperty('PHOTO_FOLDER_ID',f.getId());return f}
+function sub_(parent,name){var it=parent.getFoldersByName(name);return it.hasNext()?it.next():parent.createFolder(name)}
+function folderFor_(month,dc,plate){var key='fd-'+month+'-'+dc+'-'+plate,c=CacheService.getScriptCache(),id=c.get(key);if(id){try{return DriveApp.getFolderById(id)}catch(e){}}
+ var lock=LockService.getScriptLock();lock.waitLock(20000);try{var dcs={};cars_(false).dcs.forEach(function(d){dcs[d[0]]=d[1]});
+  var f=sub_(sub_(sub_(root_(),month),dc+' '+(dcs[dc]||'')),plate);c.put(key,f.getId(),21600);return f}finally{lock.releaseLock()}}
+
+function savePhoto_(b,who){if(!/^\d{4}-\d{2}$/.test(b.month)||!b.plate||!b.data)return{ok:false,error:'bad_request'};
+ var mime=b.mime==='application/pdf'?'application/pdf':'image/jpeg',bytes=Utilities.base64Decode(b.data);if(bytes.length>15*1024*1024)return{ok:false,error:'too_big'};
+ var name=b.plate+'_'+String(b.slot||'x').replace(/[^\w-]/g,'')+'_'+Utilities.formatDate(new Date(),TZ,'yyyyMMdd-HHmmss')+(mime==='application/pdf'?'.pdf':'.jpg');
+ var file=folderFor_(b.month,String(b.dc||''),String(b.plate)).createFile(Utilities.newBlob(bytes,mime,name));
+ try{file.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW)}catch(e){}
+ return{ok:true,id:file.getId()}}
+
+/* ---------- POST ---------- */
+function role_(key){var p=props_(),a=p.getProperty('ADMIN_KEY'),i=p.getProperty('INSPECT_KEY');if(!key)return null;key=String(key);if(a&&key===a)return'admin';if(i&&key===i)return'insp';return null}
+
+function doPost(e){var b;try{b=JSON.parse(e.postData.contents)}catch(x){return json_({ok:false,error:'bad_request'})}
+ var role=role_(b.key);if(!role){Utilities.sleep(1200);return json_({ok:false,error:'denied'})}
+ var who=String(b.who||'').slice(0,80)+(b.wdc?' @'+b.wdc:'');
+ if(b.a==='auth')return json_({ok:true,role:role});
+ if(b.a==='list'){var rows=read_('rec').filter(function(r){return !b.month||r[1]===b.month}).map(toObj_);return json_({ok:true,rows:rows})}
+ if(b.a==='photo')return json_(savePhoto_(b,who));
+ if(b.a==='cars'){if(role!=='admin')return json_({ok:false,error:'denied'});var cs=cars_(true);log_(who,'cars',cs.cars.length+' cars from '+cs.from);return json_({ok:true,cars:cs.cars,dcs:cs.dcs,from:cs.from})}
+ var lock=LockService.getScriptLock();if(!lock.tryLock(25000))return json_({ok:false,error:'busy'});
+ try{
+  var t=tab_('rec'),all=read_('rec');
+  if(b.a==='save'){var r=b.rec||{};if(!/^\d{4}-\d{2}$/.test(r.month)||!r.plate)return json_({ok:false,error:'bad_request'});
+   r.id=r.month+'|'+r.plate;var idx=-1;for(var i=0;i<all.length;i++)if(all[i][0]===r.id){idx=i;break}
+   var old=idx>=0?toObj_(all[idx]):null;
+   if(old&&old.by&&old.by!==who)log_(who,'overwrite',r.id+' (เดิมโดย '+old.by+')');
+   r.created=old?old.created:now_();r.updated=now_();r.by=who;
+   if(old){var keep={};fileIds_(r.photos).forEach(function(x){keep[x]=1});fileIds_(old.photos).forEach(function(x){if(!keep[x]){try{DriveApp.getFileById(x).setTrashed(true)}catch(err){}}})}
+   var row=toRow_(r),rg=t.getRange(idx>=0?idx+2:t.getLastRow()+1,1,1,COLS.length);rg.setNumberFormat('@');rg.setValues([row]);
+   log_(who,'save',r.id+' '+r.status+' '+r.result);return json_({ok:true,rec:toObj_(row)})}
+  if(b.a==='del'){if(role!=='admin')return json_({ok:false,error:'denied'});
+   for(var j=0;j<all.length;j++)if(all[j][0]===b.id){fileIds_(toObj_(all[j]).photos).forEach(function(x){try{DriveApp.getFileById(x).setTrashed(true)}catch(err){}});t.deleteRow(j+2);log_(who,'del',b.id);return json_({ok:true})}
+   return json_({ok:false,error:'not_found'})}
+  return json_({ok:false,error:'unknown'})
+ }finally{lock.releaseLock()}}
+
+/** กด Run ฟังก์ชันนี้ 1 ครั้งหลังวางโค้ด เพื่ออนุญาตสิทธิ์ Sheet / Drive / UrlFetch และสร้างแท็บ */
+function setup(){['rec','cars','dcs','log'].forEach(tab_);root_();var cs=cars_(true);Logger.log('รถ '+cs.cars.length+' คัน, DC '+cs.dcs.length+' แห่ง (จาก '+cs.from+')')}
