@@ -51,24 +51,26 @@ function doGet(e){var a=e&&e.parameter&&e.parameter.a;
  return json_(publicData_())}
 
 /* ---------- Fleet Planning Catalog ---------- */
-var GROUPS={p4:['front','back','left','right'],eng:['engine','battery','odo'],tyre:['tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare'],cab:['cabin','boxF','boxB','curtain','dashcam'],dmg:['damage']};
-var CAT_DEF={p4:1,eng:0,tyre:0,cab:0,dmg:0,year:0,price:0};
-function latest_(){var m={};read_('rec').forEach(function(r){var o=toObj_(r),p=m[o.plate];if(!p||o.month>p.month||(o.month===p.month&&o.status==='done'))m[o.plate]=o});return m}
+var GROUPS={p4:['front','back','left','right'],eng:['engine','battery','odo'],tyre:['tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare'],cab:['cabin','boxF','boxB','curtainF','curtainB','curtain','dashcam'],dmg:['damage']};
+var CAT_DEF={p4:1,eng:0,tyre:0,cab:0,dmg:0,year:0,price:0,dcpage:0};
+/* ล่าสุดต่อคัน; approvedOnly = เฉพาะผลตรวจที่แอดมินกด "ตรวจสอบแล้ว" (ใช้กับ Fleet Catalog) */
+function latest_(approvedOnly){var m={},ap=approvedOnly?getSet_('appr',{}):null;read_('rec').forEach(function(r){var o=toObj_(r);if(ap&&!ap[o.id])return;var p=m[o.plate];if(!p||o.month>p.month||(o.month===p.month&&o.status==='done'))m[o.plate]=o});return m}
 function fid_(x){return x&&typeof x==='string'&&x.indexOf('d:')===0?x.slice(2).split('#')[0]:null}
 function carPhotos_(rec,x){var ph={};if(rec){for(var g in GROUPS)GROUPS[g].forEach(function(k){var v=rec.photos[k];if(Array.isArray(v))v.forEach(function(y,i){var id=fid_(y);if(id)ph[k+(i+1)]=id});else{var id=fid_(v);if(id)ph[k]=id}})}
  var o=(x&&x.ph)||{};for(var k in o){if(o[k]==='-')delete ph[k];else if(o[k])ph[k]=o[k]}return ph}
 function grpOf_(k){for(var g in GROUPS)for(var i=0;i<GROUPS[g].length;i++)if(k.indexOf(GROUPS[g][i])===0)return g;return null}
 function catPublic_(){var c=CacheService.getScriptCache(),hit=c.get('cat-v1');if(hit)return JSON.parse(hit);
- var cs=cars_(false),L=latest_(),set=getSet_('cat',{}),glob=set.glob||{},per=set.per||{},carx=getSet_('carx',{});
+ var cs=cars_(false),L=latest_(true),set=getSet_('cat',{}),glob=set.glob||{},per=set.per||{},carx=getSet_('carx',{});
  var vis=function(pl,k){var p=per[pl]||{};if(k in p)return !!p[k];return k in glob?!!glob[k]:!!CAT_DEF[k]};
  var out={cars:cs.cars.map(function(r){var pl=r[0],x=carx[pl]||{},all=carPhotos_(L[pl],x),ph={};
    for(var k in all){var g=grpOf_(k);if(g&&vis(pl,g))ph[k]=all[k]}
-   return{pl:pl,ty:r[1],dc:r[3],g:r[4],yr:vis(pl,'year')?(x.yr||r[2]):'',pr:vis(pl,'price')?(x.pr||''):'',ph:ph}}),dcs:cs.dcs};
+   return{pl:pl,ty:r[1],dc:r[3],g:r[4],yr:vis(pl,'year')?(x.yr||r[2]):'',pr:vis(pl,'price')?(x.pr||''):'',ph:ph}}),dcs:cs.dcs,opt:{dcpage:'dcpage' in glob?!!glob.dcpage:false}};
  try{c.put('cat-v1',JSON.stringify(out),300)}catch(e){}return out}
-function catAdmin_(){var cs=cars_(false),L=latest_(),carx=getSet_('carx',{});
- return{ok:true,dcs:cs.dcs,set:getSet_('cat',{}),def:CAT_DEF,carx:carx,cars:cs.cars.map(function(r){var pl=r[0],x=carx[pl]||{},rec=L[pl];
+function catAdmin_(){var cs=cars_(false),L=latest_(true),A=latest_(false),carx=getSet_('carx',{}),ap=getSet_('appr',{});
+ return{ok:true,dcs:cs.dcs,set:getSet_('cat',{}),def:CAT_DEF,carx:carx,cars:cs.cars.map(function(r){var pl=r[0],x=carx[pl]||{},rec=L[pl],last=A[pl];
   return{pl:pl,ty:r[1],dc:r[3],g:r[4],yr0:r[2],yr:x.yr||r[2],pr:x.pr||'',ph:carPhotos_(rec,x),
-   ins:rec?{m:rec.month,st:rec.status,res:rec.result,by:rec.inspector,mile:rec.mile,upd:rec.updated,checks:rec.checks,tyres:rec.tyres,issue:rec.issue}:null}})}}
+   wait:last&&!ap[last.id]?last.month:'',
+   ins:rec?{m:rec.month,st:rec.status,res:rec.result,by:rec.inspector,mile:rec.mile,upd:rec.updated,checks:rec.checks,tyres:rec.tyres,issue:rec.issue,ap:ap[rec.id]||null}:null}})}}
 function catClear_(){CacheService.getScriptCache().remove('cat-v1')}
 
 /* ---------- รูปภาพใน Google Drive ---------- */
@@ -93,13 +95,49 @@ function img_(id){var rootId=props_().getProperty('PHOTO_FOLDER_ID');if(!id||!ro
   if(!ok)return{ok:false,error:'denied'};var bl=f.getBlob();return{ok:true,mime:bl.getContentType(),data:Utilities.base64Encode(bl.getBytes())}}catch(e){return{ok:false,error:'not_found'}}}
 
 /* ---------- POST ---------- */
-function role_(key){var p=props_(),a=p.getProperty('ADMIN_KEY'),i=p.getProperty('INSPECT_KEY');if(!key)return null;key=String(key);if(a&&key===a)return'admin';if(i&&key===i)return'insp';return null}
+/* ผู้ตรวจไม่ต้องใช้รหัส (ใส่ DC + ชื่อ) ส่วนผู้ดูแลต้องใช้ ADMIN_KEY */
+function role_(key){var a=props_().getProperty('ADMIN_KEY');return a&&key&&String(key)===a?'admin':'insp'}
+
+/* ---------- ความผิดปกติแยกหมวด (ใช้ข้อมูลที่ผู้ตรวจกรอก) ---------- */
+var BODY_CK=['headlight','taillight','signal','mirror','wiper'],BOX_CK=['door','reefer','curtain','curtainF','curtainB'];
+function bad_(o,k){return o.checks&&o.checks[k]&&o.checks[k].v==='bad'}
+function cats_(o){var cam=o.checks&&o.checks.dashcam&&(o.checks.dashcam.s==='broken'||o.checks.dashcam.s==='card');
+ var body=BODY_CK.some(function(k){return bad_(o,k)})||((o.photos||{}).damage||[]).length>0;
+ var box=BOX_CK.some(function(k){return bad_(o,k)});var tyre=!!oldTyre_(o.tyres);
+ return{cam:!!cam,tyre:tyre,body:!!body,box:!!box,any:o.result==='issue'||cam||tyre||body||box}}
+var TYAB={'040':'AB','042':'CC'};
+var CKN={headlight:'ไฟหน้า',taillight:'ไฟท้าย / ไฟเบรก',signal:'ไฟเลี้ยว / ไฟฉุกเฉิน',brake:'เบรก',handbrake:'เบรกมือ',ac:'แอร์ห้องโดยสาร',horn:'แตร',wiper:'ที่ปัดน้ำฝน',mirror:'กระจก / กระจกมองข้าง',belt:'เข็มขัดนิรภัย',fluid:'น้ำมันเครื่อง / น้ำหล่อเย็น',dash:'ไฟเตือนหน้าปัด',door:'ประตูตู้ / ซีลยาง / กุญแจ',reefer:'ตู้เย็น',curtainF:'ม่านความเย็น ด้านหน้า',curtainB:'ม่านความเย็น ด้านหลัง',dashcam:'กล้องหน้ารถ'};
+var PHN={front:'ด้านหน้า',back:'ด้านหลัง',right:'ด้านข้างขวา',left:'ด้านข้างซ้าย',engine:'ห้องเครื่อง',battery:'แบตเตอรี่',odo:'หน้าปัดเลขไมล์',tFL:'ยางหน้าซ้าย',tFR:'ยางหน้าขวา',tRL:'ยางหลังซ้าย',tRR:'ยางหลังขวา',dFL:'ปียาง หน้าซ้าย',dFR:'ปียาง หน้าขวา',dRL:'ปียาง หลังซ้าย',dRR:'ปียาง หลังขวา',spare:'ยางอะไหล่',cabin:'ห้องโดยสาร',boxF:'ภายในตู้ ด้านหน้า',boxB:'ภายในตู้ ด้านหลัง',curtainF:'ม่านความเย็น ด้านหน้า',curtainB:'ม่านความเย็น ด้านหลัง',dashcam:'กล้องหน้ารถ'};
+
+/* ---------- สรุปขึ้น Google Sheet: แท็บ Summary (รายเดือน AB/CC) และ Detail (รายคันครบทุกหัวข้อ) ---------- */
+function sheetW_(name,rows){var s=ss_(),t=s.getSheetByName(name)||s.insertSheet(name);t.clearContents();if(!rows.length)return;var w=0;rows.forEach(function(r){w=Math.max(w,r.length)});
+ rows=rows.map(function(r){while(r.length<w)r.push('');return r});var rg=t.getRange(1,1,rows.length,w);rg.setNumberFormat('@');rg.setValues(rows);t.getRange(1,1,1,w).setFontWeight('bold');t.setFrozenRows(1)}
+function reports_(){try{var cs=cars_(false),dcs={},zone={},tyOf={};cs.dcs.forEach(function(d){dcs[d[0]]=d[1];zone[d[0]]=d[2]});cs.cars.forEach(function(c){tyOf[c[0]]=TYAB[c[1]]||c[1]});
+ var recs=read_('rec').map(toObj_),appr=getSet_('appr',{}),months={};recs.forEach(function(o){months[o.month]=1});
+ var tot={AB:0,CC:0};cs.cars.forEach(function(c){var t=TYAB[c[1]];if(t)tot[t]++});
+ var S=[['เดือน','หัวข้อ','AB รถแห้ง','CC รถเย็น','รวม']];
+ Object.keys(months).sort().reverse().forEach(function(m){var k={done:{AB:0,CC:0},ok:{AB:0,CC:0},bad:{AB:0,CC:0},cam:{AB:0,CC:0},tyre:{AB:0,CC:0},body:{AB:0,CC:0},box:{AB:0,CC:0}};
+  recs.filter(function(o){return o.month===m&&o.status==='done'}).forEach(function(o){var t=tyOf[o.plate]||TYAB[o.type];if(!t)return;var c=cats_(o);k.done[t]++;k[c.any?'bad':'ok'][t]++;['cam','tyre','body','box'].forEach(function(x){if(c[x])k[x][t]++})});
+  [['รถทั้งหมด',tot],['ตรวจครบ',k.done],['ปกติ',k.ok],['ไม่ปกติ',k.bad],['ไม่ปกติ: กล้องหน้ารถ',k.cam],['ไม่ปกติ: ยางรถยนต์ (อายุ 5 ปีขึ้นไป)',k.tyre],['ไม่ปกติ: ภาพรอบคัน',k.body],['ไม่ปกติ: ภายในตู้ หน้า-หลัง',k.box]].forEach(function(r){S.push([m,r[0],r[1].AB,r[1].CC,r[1].AB+r[1].CC])})});
+ sheetW_('Summary',S);
+ var CKS=Object.keys(CKN).filter(function(k){return k!=='dashcam'}),PHS=Object.keys(PHN);
+ var D=[['เดือน','ภาค','DC','ทะเบียน','ชนิด','กลุ่ม','ผู้ตรวจ','เลขไมล์','สถานะ','ผล','กล้องหน้ารถ','ยางอายุ 5 ปีขึ้นไป','รอบคันผิดปกติ','ภายในตู้ผิดปกติ','ตรวจสอบแล้ว (แอดมิน)','ปียาง หน้าซ้าย','ปียาง หน้าขวา','ปียาง หลังซ้าย','ปียาง หลังขวา'].concat(CKS.map(function(k){return CKN[k]}),['สรุปความผิดปกติ','บันทึกล่าสุด','บันทึกโดย'],PHS.map(function(k){return'รูป '+PHN[k]}),['รูปจุดที่ผิดปกติ','ใบเคลม / ประวัติรถ'])];
+ var link=function(x){var id=fid_(x);return id?'https://drive.google.com/file/d/'+id+'/view':''};
+ recs.sort(function(a,b){return a.month<b.month?1:a.month>b.month?-1:(+a.dc)-(+b.dc)||(a.plate<b.plate?-1:1)}).forEach(function(o){var c=cats_(o),ty=o.tyres||{},ap=appr[o.id];
+  D.push([o.month,zone[o.dc]||'',dcs[o.dc]||o.dc,o.plate,tyOf[o.plate]||o.type,o.grp==='A'?'รถใช้งาน':o.grp==='S'?'รถ Stock':o.grp,o.inspector,o.mile,o.status==='done'?'ครบ':'ยังไม่ครบ',c.any?'ไม่ปกติ':'ปกติ',
+   (o.checks.dashcam&&o.checks.dashcam.n)||'',c.tyre?'ใช่':'',c.body?'ใช่':'',c.box?'ใช่':'',ap?('ใช่ · '+ap.by+' · '+ap.at):'',ty.FL||'',ty.FR||'',ty.RL||'',ty.RR||''].concat(
+   CKS.map(function(k){var v=o.checks[k];return !v||!v.v?'':v.v==='ok'?'ปกติ':v.v==='bad'?'ผิดปกติ'+(v.n?': '+v.n:''):''}),
+   [o.issue&&o.issue.v==='has'?o.issue.t:o.issue&&o.issue.v==='none'?'ปกติ ไม่พบปัญหา':'',o.updated,o.by],
+   PHS.map(function(k){return link(o.photos[k])}),[(o.photos.damage||[]).map(link).join(' '),(o.photos.claim||[]).map(link).join(' ')]))});
+ sheetW_('Detail',D)}catch(e){log_('system','reports-error',e.message)}}
 
 function doPost(e){var b;try{b=JSON.parse(e.postData.contents)}catch(x){return json_({ok:false,error:'bad_request'})}
- var role=role_(b.key);if(!role){Utilities.sleep(1200);return json_({ok:false,error:'denied'})}
+ var role=role_(b.key);
  var who=String(b.who||'').slice(0,80)+(b.wdc?' @'+b.wdc:'');
- if(b.a==='auth')return json_({ok:true,role:role});
- if(b.a==='list'){var rows=read_('rec').filter(function(r){return !b.month||r[1]===b.month}).map(toObj_);return json_({ok:true,rows:rows})}
+ if(b.a==='auth'){if(b.key&&role!=='admin'){Utilities.sleep(1200);return json_({ok:false,error:'denied'})}return json_({ok:true,role:role})}
+ if(b.a==='list'){var rows=read_('rec').filter(function(r){return !b.month||r[1]===b.month}).map(toObj_);return json_({ok:true,rows:rows,appr:role==='admin'?getSet_('appr',{}):{}})}
+ if(b.a==='appr'){if(role!=='admin')return json_({ok:false,error:'denied'});var lka=LockService.getScriptLock();lka.waitLock(20000);try{var ap=getSet_('appr',{});(b.ids||[]).forEach(function(id){if(b.on)ap[id]={by:String(b.who||'แอดมิน').slice(0,60),at:now_()};else delete ap[id]});putSet_('appr',ap);catClear_();log_(who,b.on?'approve':'unapprove',(b.ids||[]).join(','));reports_();return json_({ok:true,appr:ap})}finally{lka.releaseLock()}}
+ if(b.a==='report'){if(role!=='admin')return json_({ok:false,error:'denied'});reports_();return json_({ok:true})}
  if(b.a==='photo')return json_(savePhoto_(b,who));
  if(b.a==='img')return json_(img_(String(b.id||'')));
  if(b.a==='catadmin'){if(role!=='admin')return json_({ok:false,error:'denied'});return json_(catAdmin_())}
@@ -117,9 +155,9 @@ function doPost(e){var b;try{b=JSON.parse(e.postData.contents)}catch(x){return j
    r.created=old?old.created:now_();r.updated=now_();r.by=who;
    if(old){var keep={};fileIds_(r.photos).forEach(function(x){keep[x]=1});fileIds_(old.photos).forEach(function(x){if(!keep[x]){try{DriveApp.getFileById(x).setTrashed(true)}catch(err){}}})}
    var row=toRow_(r),rg=t.getRange(idx>=0?idx+2:t.getLastRow()+1,1,1,COLS.length);rg.setNumberFormat('@');rg.setValues([row]);
-   catClear_();log_(who,'save',r.id+' '+r.status+' '+r.result);return json_({ok:true,rec:toObj_(row)})}
+   catClear_();log_(who,'save',r.id+' '+r.status+' '+r.result);reports_();return json_({ok:true,rec:toObj_(row)})}
   if(b.a==='del'){if(role!=='admin')return json_({ok:false,error:'denied'});
-   for(var j=0;j<all.length;j++)if(all[j][0]===b.id){fileIds_(toObj_(all[j]).photos).forEach(function(x){try{DriveApp.getFileById(x).setTrashed(true)}catch(err){}});t.deleteRow(j+2);catClear_();log_(who,'del',b.id);return json_({ok:true})}
+   for(var j=0;j<all.length;j++)if(all[j][0]===b.id){fileIds_(toObj_(all[j]).photos).forEach(function(x){try{DriveApp.getFileById(x).setTrashed(true)}catch(err){}});t.deleteRow(j+2);catClear_();log_(who,'del',b.id);reports_();return json_({ok:true})}
    return json_({ok:false,error:'not_found'})}
   return json_({ok:false,error:'unknown'})
  }finally{lock.releaseLock()}}
