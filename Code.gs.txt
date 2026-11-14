@@ -57,6 +57,12 @@ function savePhoto_(b,who){if(!/^\d{4}-\d{2}$/.test(b.month)||!b.plate||!b.data)
  try{file.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW)}catch(e){}
  return{ok:true,id:file.getId()}}
 
+/* รูปสำหรับสร้างรูปสรุป: ส่งได้เฉพาะไฟล์ที่อยู่ในโฟลเดอร์รูปของระบบนี้ */
+function img_(id){var rootId=props_().getProperty('PHOTO_FOLDER_ID');if(!id||!rootId)return{ok:false,error:'not_found'};
+ try{var f=DriveApp.getFileById(id),p=f.getParents(),ok=false,depth=0;
+  while(p.hasNext()&&depth<6){var d=p.next();if(d.getId()===rootId){ok=true;break}p=d.getParents();depth++}
+  if(!ok)return{ok:false,error:'denied'};var bl=f.getBlob();return{ok:true,mime:bl.getContentType(),data:Utilities.base64Encode(bl.getBytes())}}catch(e){return{ok:false,error:'not_found'}}}
+
 /* ---------- POST ---------- */
 function role_(key){var p=props_(),a=p.getProperty('ADMIN_KEY'),i=p.getProperty('INSPECT_KEY');if(!key)return null;key=String(key);if(a&&key===a)return'admin';if(i&&key===i)return'insp';return null}
 
@@ -66,6 +72,7 @@ function doPost(e){var b;try{b=JSON.parse(e.postData.contents)}catch(x){return j
  if(b.a==='auth')return json_({ok:true,role:role});
  if(b.a==='list'){var rows=read_('rec').filter(function(r){return !b.month||r[1]===b.month}).map(toObj_);return json_({ok:true,rows:rows})}
  if(b.a==='photo')return json_(savePhoto_(b,who));
+ if(b.a==='img')return json_(img_(String(b.id||'')));
  if(b.a==='cars'){if(role!=='admin')return json_({ok:false,error:'denied'});var cs=cars_(true);log_(who,'cars',cs.cars.length+' cars from '+cs.from);return json_({ok:true,cars:cs.cars,dcs:cs.dcs,from:cs.from})}
  var lock=LockService.getScriptLock();if(!lock.tryLock(25000))return json_({ok:false,error:'busy'});
  try{

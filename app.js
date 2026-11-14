@@ -25,13 +25,17 @@ const IC={
 
 /* ---------- form definition (from the paper form) ---------- */
 const PHOTO=[
- {k:'body',t:'ภาพรถรอบคัน 4 ด้าน',s:[['front','ด้านหน้า'],['back','ด้านหลัง'],['left','ด้านซ้าย'],['right','ด้านขวา']]},
- {k:'engine',t:'ห้องเครื่อง / แบตเตอรี่ / หน้าปัดเลขไมล์',s:[['engine','ห้องเครื่อง'],['battery','แบตเตอรี่'],['odo','หน้าปัดเลขไมล์']]},
- {k:'tyre',t:'ยางถ่ายเต็มวง 4 เส้น',s:[['tFL','ยางหน้าซ้าย'],['tFR','ยางหน้าขวา'],['tRL','ยางหลังซ้าย'],['tRR','ยางหลังขวา']]},
- {k:'dot',t:'ปียาง',s:[['dFL','ปียาง หน้าซ้าย'],['dFR','ปียาง หน้าขวา'],['dRL','ปียาง หลังซ้าย'],['dRR','ปียาง หลังขวา']]},
- {k:'spare',t:'ยางอะไหล่',s:[['spare','ยางอะไหล่']]},
- {k:'cabin',t:'ห้องโดยสาร',s:[['cabin','ห้องโดยสาร']]},
- {k:'box',t:'ภายในตู้ ด้านหน้า-ด้านหลัง',s:[['boxF','ภายในตู้ ด้านหน้า'],['boxB','ภายในตู้ ด้านหลัง']]}];
+ {k:'body',t:'ภาพรถเต็มคัน 4 ด้าน',c:'#f4c430',s:[['front','ด้านหน้า'],['back','ด้านหลัง'],['right','ด้านข้างขวา'],['left','ด้านข้างซ้าย']]},
+ {k:'engine',t:'ห้องเครื่อง / แบตเตอรี่ / หน้าปัดเลขไมล์',c:'#f28b7d',s:[['engine','ห้องเครื่อง'],['battery','แบตเตอรี่'],['odo','หน้าปัดเลขไมล์']]},
+ {k:'tyre',t:'ยางถ่ายเต็มวง 4 เส้น',c:'#a8d86e',s:[['tFL','ยางหน้าซ้าย'],['tFR','ยางหน้าขวา'],['tRL','ยางหลังซ้าย'],['tRR','ยางหลังขวา']]},
+ {k:'dot',t:'ถ่ายเห็นปียาง',c:'#f7b23b',s:[['dFL','ปียาง หน้าซ้าย'],['dFR','ปียาง หน้าขวา'],['dRL','ปียาง หลังซ้าย'],['dRR','ปียาง หลังขวา']]},
+ {k:'spare',t:'ยางอะไหล่',c:'#c58af0',s:[['spare','ยางอะไหล่']]},
+ {k:'cabin',t:'ห้องโดยสาร',c:'#8cc8f5',s:[['cabin','ห้องโดยสาร']]},
+ {k:'box',t:'ภาพภายในตู้ หน้า-หลัง',c:'#6fdcd0',s:[['boxF','ภายในตู้ ด้านหน้า'],['boxB','ภายในตู้ ด้านหลัง']]},
+ {k:'curtain',t:'ม่านความเย็น',c:'#9fb8ff',only:'042',s:[['curtain','ม่านความเย็น']]}];
+const photoFor=t=>PHOTO.filter(s=>!s.only||s.only===t||!TYN[t]);
+/* example photos shown inside empty slots (from the paper form sample) */
+const GUIDE=new Set(['front','back','right','left','engine','tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare','cabin','boxF','boxB','curtain']);
 const LBL=Object.fromEntries(PHOTO.flatMap(x=>x.s));LBL.damage='จุดที่ผิดปกติ';LBL.claim='ใบเคลม / ประวัติรถ';
 const TY=[['FL','หน้าซ้าย'],['FR','หน้าขวา'],['RL','หลังซ้าย'],['RR','หลังขวา']];
 const CHECKS=[
@@ -39,7 +43,8 @@ const CHECKS=[
  ['brake','เบรก'],['handbrake','เบรกมือ'],['ac','แอร์ห้องโดยสาร'],['horn','แตร'],['wiper','ที่ปัดน้ำฝน'],
  ['mirror','กระจก / กระจกมองข้าง'],['belt','เข็มขัดนิรภัย'],['fluid','น้ำมันเครื่อง / น้ำหล่อเย็น'],
  ['dash','ไฟเตือนหน้าปัด','ไม่มีไฟเตือนค้าง'],['door','ประตูตู้ / ซีลยาง / กุญแจ'],
- ['reefer','ตู้เย็น (เครื่องทำความเย็น)','เฉพาะรถ 042 ควบคุมอุณหภูมิ',t=>t==='042']];
+ ['reefer','ตู้เย็น (เครื่องทำความเย็น)','เฉพาะรถ 042 ควบคุมอุณหภูมิ',t=>t==='042'],
+ ['curtain','ม่านความเย็น','ม่านครบ ไม่ขาด ไม่หลุดราง · เฉพาะรถ 042',t=>t==='042']];
 const CKL=Object.fromEntries(CHECKS.map(c=>[c[0],c[1]]));
 const checksFor=t=>CHECKS.filter(c=>!c[3]||c[3](t)||!TYN[t]);
 function tyreAge(s){s=String(s||'');if(!/^\d{4}$/.test(s))return null;const wk=+s.slice(0,2),yr=2000+(+s.slice(2));if(wk<1||wk>53)return null;const a=(Date.now()-new Date(yr,0,1+(wk-1)*7))/31557600000;return a<-0.05?null:Math.max(0,a)}
@@ -47,12 +52,12 @@ const ageTxt=a=>{const y=Math.floor(a),m=Math.floor((a-y)*12);return[y?y+' ป�
 const tyreOld=t=>TY.some(([k])=>{const a=tyreAge((t||{})[k]);return a!=null&&a>=MAXY});
 function missing(f){const m=[];
  if(!(f.inspector||'').trim())m.push(['info','ชื่อผู้ตรวจ']);
- PHOTO.forEach(sec=>sec.s.forEach(([k,l])=>{if(!f.photos[k])m.push([sec.k,'รูป'+l])}));
+ photoFor(f.type).forEach(sec=>sec.s.forEach(([k,l])=>{if(!f.photos[k])m.push([sec.k,'รูป'+l])}));
  TY.forEach(([k,l])=>{if(tyreAge(f.tyres[k])==null)m.push(['dot','ปียาง'+l])});
  checksFor(f.type).forEach(([k,l])=>{if(!(f.checks[k]&&f.checks[k].v))m.push(['check',l])});
  if(!f.issue.v)m.push(['issue','สรุปความผิดปกติ']);else if(f.issue.v==='has'&&!(f.issue.t||'').trim())m.push(['issue','รายละเอียดความผิดปกติ']);
  return m}
-const totalItems=f=>1+PHOTO.reduce((a,s)=>a+s.s.length,0)+TY.length+checksFor(f.type).length+1;
+const totalItems=f=>1+photoFor(f.type).reduce((a,s)=>a+s.s.length,0)+TY.length+checksFor(f.type).length+1;
 const badList=f=>Object.keys(f.checks||{}).filter(k=>f.checks[k]&&f.checks[k].v==='bad');
 const resultOf=f=>(f.issue&&f.issue.v==='has')||badList(f).length?'issue':'ok';
 
@@ -103,12 +108,26 @@ async function shrink(file,plate,label){const url=URL.createObjectURL(file);try{
  const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('อ่านรูปไม่ได้'));i.src=url});
  const M=1600,s=Math.min(1,M/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.round(img.naturalWidth*s),h=Math.round(img.naturalHeight*s);
  const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.drawImage(img,0,0,w,h);
+ const a=analyze(c),warn=[];let fixed=false;
+ if(a.mean<100&&a.hi-a.lo>8){autoLight(c,a);fixed=true}
+ if(a.mean<30)warn.push('รูปมืดมาก');if(a.sharp<15)warn.push('รูปเบลอหรือสั่น');
  try{await document.fonts.load('500 20px Prompt')}catch(e){}
  const fs=Math.max(14,Math.round(Math.min(w,h)*0.034)),bh=Math.round(fs*1.9),d=new Date();
  const txt=`${plate} · ${label} · ${d.getDate()} ${THM[d.getMonth()]} ${d.getFullYear()+543} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
  x.fillStyle='rgba(6,26,61,.72)';x.fillRect(0,h-bh,w,bh);x.fillStyle='#d4af37';x.fillRect(0,h-bh,Math.max(4,fs*.3),bh);
  x.font=`500 ${fs}px Prompt, sans-serif`;x.fillStyle='#fff';x.textBaseline='middle';x.fillText(txt,fs*.9,h-bh/2,w-fs*1.4);
- return await new Promise(r=>c.toBlob(r,'image/jpeg',0.8))}finally{URL.revokeObjectURL(url)}}
+ const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.8));return{blob,warn,fixed}}finally{URL.revokeObjectURL(url)}}
+/* brightness (0-255), 1%/99% levels and sharpness (variance of the Laplacian) on a small copy */
+function analyze(src){const W=160,H=Math.max(2,Math.round(src.height*W/src.width)),s=document.createElement('canvas');s.width=W;s.height=H;const x=s.getContext('2d');x.drawImage(src,0,0,W,H);
+ const d=x.getImageData(0,0,W,H).data,L=new Float32Array(W*H);let sum=0;for(let i=0,j=0;i<d.length;i+=4,j++){L[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];sum+=L[j]}
+ const sorted=Float32Array.from(L).sort(),lo=sorted[Math.floor(L.length*0.01)],hi=sorted[Math.floor(L.length*0.99)];
+ let m=0,v=0,n=0;for(let y=1;y<H-1;y++)for(let q=1;q<W-1;q++){const k=y*W+q,t=4*L[k]-L[k-1]-L[k+1]-L[k-W]-L[k+W];m+=t;v+=t*t;n++}
+ return{mean:sum/L.length,lo,hi,sharp:n?v/n-(m/n)*(m/n):0}}
+/* stretch the levels and lift the mid-tones of a dark photo */
+function autoLight(c,a){const x=c.getContext('2d'),im=x.getImageData(0,0,c.width,c.height),d=im.data;
+ const lo=a.lo,span=Math.max(1,a.hi-lo),m=Math.min(0.9,Math.max(0.02,(a.mean-lo)/span)),g=Math.min(1,Math.max(0.45,Math.log(0.45)/Math.log(m)));
+ const lut=new Uint8ClampedArray(256);for(let i=0;i<256;i++){const t=Math.min(1,Math.max(0,(i-lo)/span));lut[i]=Math.round(255*Math.pow(t,g))}
+ for(let i=0;i<d.length;i+=4){d[i]=lut[d[i]];d[i+1]=lut[d[i+1]];d[i+2]=lut[d[i+2]]}x.putImageData(im,0,0)}
 
 /* ---------- sync queue ---------- */
 let syncing=false,retryT=null;
@@ -143,7 +162,7 @@ window.addEventListener('online',()=>{S.online=true;updSync();sync()});window.ad
 /* ---------- ui helpers ---------- */
 let toastT;function toast(t,bad){const el=$('#toast');el.textContent=t;el.className='toast'+(bad?' bad':'');el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,2800)}
 function sheet(html,cls=''){const s=$('#sheet');s.className='sheet '+cls;s.innerHTML='<button class="close" data-x aria-label="ปิด">✕</button>'+html;$('#ov').hidden=false;s.scrollTop=0;s.querySelector('[data-x]').onclick=closeSheet;return s}
-function closeSheet(){$('#ov').hidden=true;$('#sheet').innerHTML=''}
+function closeSheet(){if(S.onClose){const f=S.onClose;S.onClose=null;f();return}$('#ov').hidden=true;$('#sheet').innerHTML=''}
 $('#ov').addEventListener('click',e=>{if(e.target.id==='ov')closeSheet()});
 async function shareText(t){if(navigator.share){try{await navigator.share({text:t});return}catch(e){if(e.name==='AbortError')return}}
  try{await navigator.clipboard.writeText(t);toast('คัดลอกแล้ว วางใน LINE ได้เลย')}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove();toast('คัดลอกแล้ว')}}
@@ -204,7 +223,7 @@ async function openForm(pl){const c=S.carBy[pl];if(!c||!canEdit())return false;c
  if(!S.form.inspector)S.form.inspector=S.sess.name||'';return true}
 function saveDraft(){clearTimeout(draftT);draftT=setTimeout(()=>{if(!S.form)return;S.drafts[S.form.id]=JSON.parse(JSON.stringify(S.form));IDB.put('drafts',S.form.id,S.drafts[S.form.id])},300)}
 function slotHtml(k,label,ref,multiKey,idx){
- if(!ref)return`<button type="button" class="slot" data-slot="${k}">${IC.cam}<span>${esc(label)}</span></button>`;
+ if(!ref)return GUIDE.has(k)&&!multiKey?`<div class="slot ex" data-slot="${k}" role="button" tabindex="0" aria-label="ถ่าย${esc(label)}" style="background-image:url('guide/${k}.jpg')"><span class="exb">ตัวอย่าง</span><button type="button" class="exv" data-ex="${k}" aria-label="ดูตัวอย่าง ${esc(label)}">⤢</button>${IC.cam}<span class="exl">แตะเพื่อถ่าย · ${esc(label)}</span></div>`:`<button type="button" class="slot" data-slot="${k}">${IC.cam}<span>${esc(label)}</span></button>`;
  const wait=ref.startsWith('l:')&&!S.MAP[ref.slice(2)];
  return`<div class="slot has${isPdf(ref)?' pdf':''}" ${bg(ref,400)} data-view="${esc(ref)}" data-lbl="${esc(label)}">${isPdf(ref)?IC.file+'<span>PDF</span>':''}<span class="st${wait?' wait':''}">${wait?'รอส่ง':'✓ ส่งแล้ว'}</span><button type="button" class="x" data-rm="${k}"${multiKey?` data-i="${idx}"`:''} aria-label="ลบรูป ${esc(label)}">✕</button><span class="cap">${esc(label)}</span></div>`}
 function multiHtml(k){const arr=S.form.photos[k]||[];return arr.map((r,i)=>slotHtml(k,LBL[k]+' '+(i+1),r,k,i)).join('')+`<button type="button" class="slot" data-slot="${k}" data-multi="1">${IC.plus}<span>เพิ่ม${k==='claim'?'รูป / PDF':'รูป'}</span></button>`}
@@ -216,7 +235,7 @@ function viewForm(){const f=S.form,c=S.carBy[f.plate];
  <section class="sec" id="sec-info">${H('info','ข้อมูลรถ')}<div class="body"><div class="row2"><div class="field"><label class="l">ทะเบียน</label><input readonly value="${esc(f.plate)}"></div><div class="field"><label class="l">DC</label><input readonly value="${esc(dcName(f.dc))}"></div></div>
   <div class="row2"><div class="field"><label class="l">ชนิดรถ</label><input readonly value="${esc(TYN[f.type]||f.type)}"></div><div class="field"><label class="l">กลุ่ม / ปีรถ</label><input readonly value="${esc((GRP[f.grp]||f.grp)+(c&&c.yr?' · '+c.yr:''))}"></div></div>
   <div class="row2"><div class="field"><label class="l" for="f-insp">ผู้ตรวจ <span class="req">*</span></label><input id="f-insp" data-f="inspector" value="${esc(f.inspector)}" autocomplete="name"></div><div class="field"><label class="l" for="f-mile">เลขไมล์ (กม.)</label><input id="f-mile" data-f="mile" inputmode="numeric" pattern="[0-9]*" value="${esc(f.mile)}" placeholder="ไม่บังคับ"></div></div></div></section>
- ${PHOTO.map(sec=>`<section class="sec" id="sec-${sec.k}">${H(sec.k,sec.t,sec.k==='dot'?'ใส่เลข 4 หลัก สัปดาห์+ปี เช่น 4523':'')}<div class="body"><div class="slots">${sec.s.map(([k,l])=>slotHtml(k,l,f.photos[k])).join('')}</div>${sec.k==='dot'?`<div class="tyre">${TY.map(([k,l])=>`<div class="field"><label class="l" for="ty-${k}">ปียาง ${l} <span class="req">*</span></label><input id="ty-${k}" data-ty="${k}" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="WWYY" value="${esc(f.tyres[k]||'')}"><div class="age" id="age-${k}"></div></div>`).join('')}</div>`:''}</div></section>`).join('')}
+ ${photoFor(f.type).map(sec=>`<section class="sec" id="sec-${sec.k}" style="--sc:${sec.c}">${H(sec.k,sec.t,sec.k==='dot'?'ใส่เลข 4 หลัก สัปดาห์+ปี เช่น 4523':sec.only?'เฉพาะรถ 042 CC':'')}<div class="body"><div class="slots">${sec.s.map(([k,l])=>slotHtml(k,l,f.photos[k])).join('')}</div>${sec.k==='dot'?`<div class="tyre">${TY.map(([k,l])=>`<div class="field"><label class="l" for="ty-${k}">ปียาง ${l} <span class="req">*</span></label><input id="ty-${k}" data-ty="${k}" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="WWYY" value="${esc(f.tyres[k]||'')}"><div class="age" id="age-${k}"></div></div>`).join('')}</div>`:''}</div></section>`).join('')}
  <section class="sec" id="sec-check">${H('check','รายการตรวจ ปกติ / ผิดปกติ',checksFor(f.type).length+' รายการ')}<div class="body"><button type="button" class="allok" id="allok">${IC.check.replace('<svg','<svg width="16" height="16" style="vertical-align:-3px"')} ที่เหลือปกติทั้งหมด</button><div class="ck">${checksFor(f.type).map(([k,l,h])=>ckRow(k,l,h)).join('')}</div></div></section>
  <section class="sec" id="sec-issue">${H('issue','สรุปความผิดปกติ / สิ่งที่ต้องดำเนินการ')}<div class="body"><div class="seg3"><button type="button" data-iss="none" data-v="none" aria-pressed="${f.issue.v==='none'}">ปกติ ไม่พบปัญหา</button><button type="button" data-iss="has" data-v="has" aria-pressed="${f.issue.v==='has'}">พบความผิดปกติ</button></div>
   <div class="field" id="iss-wrap"${f.issue.v==='has'?'':' hidden'}><label class="l" for="f-iss">รายละเอียด <span class="req">*</span></label><textarea id="f-iss" data-iss-t placeholder="เช่น กันชนหลังแตก ไฟเบรกซ้ายไม่ติด">${esc(f.issue.t||'')}</textarea></div>
@@ -239,6 +258,7 @@ function showMissing(){const m=missing(S.form);if(!m.length)return;const by={};m
 function jump(s){const el=$('#sec-'+s);if(el)el.scrollIntoView({behavior:'smooth',block:'start'})}
 $('#view').addEventListener('click',e=>{if(S.view!=='form')return;const t=e.target;
  const rm=t.closest('[data-rm]');if(rm){e.stopPropagation();if(!confirm('ลบรูปนี้?'))return;const k=rm.dataset.rm;if(rm.dataset.i!=null){S.form.photos[k].splice(+rm.dataset.i,1);$('#multi-'+k).innerHTML=multiHtml(k);hydrate($('#multi-'+k))}else{delete S.form.photos[k];const sl=rm.closest('.slot');sl.outerHTML=slotHtml(k,LBL[k],null)}changed();return}
+ const ex=t.closest('[data-ex]');if(ex){e.stopPropagation();sheet(`<h2>ตัวอย่าง · ${esc(LBL[ex.dataset.ex])}</h2><img src="guide/${ex.dataset.ex}.jpg" alt="ตัวอย่าง ${esc(LBL[ex.dataset.ex])}"><button type="button" class="btn gold" id="ex-go">${IC.cam} ถ่ายรูปนี้</button>`,'pic');$('#ex-go').onclick=()=>{closeSheet();pick(ex.dataset.ex,false)};return}
  const sl=t.closest('[data-slot]');if(sl){pick(sl.dataset.slot,!!sl.dataset.multi);return}
  const vw=t.closest('[data-view]');if(vw){viewPic(vw.dataset.view,vw.dataset.lbl);return}
  const ck=t.closest('[data-ck]');if(ck){const k=ck.dataset.ck,v=ck.dataset.v,cur=S.form.checks[k]||{};S.form.checks[k]={v:cur.v===v?'':v,n:cur.n||''};$('#ck-'+k).outerHTML=ckRow(k,CKL[k],(CHECKS.find(c=>c[0]===k)||[])[2]);
@@ -256,12 +276,19 @@ $('#view').addEventListener('input',e=>{if(S.view!=='form')return;const t=e.targ
 /* photo picking */
 let picking=null;
 function pick(slot,multi){picking={slot,multi};const inp=slot==='claim'?$('#file-any'):$('#file-img');inp.multiple=!!multi;inp.value='';inp.click()}
+/* a dark or blurry photo: show it and let the inspector retake or keep it */
+function askKeep(blob,warn,slot,multi){return new Promise(res=>{const u=URL.createObjectURL(blob);
+ sheet(`<h2>${warn.map(esc).join(' และ ')}</h2><img src="${u}" alt="รูปที่เพิ่งถ่าย"><p class="say" style="color:#e6d79c">ถ่ายใหม่จะได้รูปที่ชัดกว่า หรือใช้รูปนี้ก็ได้</p><div class="btns"><button type="button" class="btn alt" id="k-use">ใช้รูปนี้</button><button type="button" class="btn gold" id="k-again">${IC.cam} ถ่ายใหม่</button></div>`,'pic');
+ const done=v=>{S.onClose=null;URL.revokeObjectURL(u);closeSheet();res(v)};S.onClose=()=>done(true);
+ $('#k-use').onclick=()=>done(true);$('#k-again').onclick=()=>{done(false);pick(slot,multi)}})}
 let shrinking=0;
 async function onFiles(e){const files=[...e.target.files];if(!files.length||!picking||!S.form)return;const{slot,multi}=picking;picking=null;const f=S.form;shrinking++;try{await addFiles(files,slot,multi,f)}finally{shrinking--}}
 async function addFiles(files,slot,multi,f){
  for(const file of files){let el=multi?null:$(`[data-slot="${slot}"]`);if(el)el.classList.add('busy');
   try{let blob,mime;if(file.type==='application/pdf'){if(file.size>10*1024*1024){toast('ไฟล์ PDF ใหญ่เกิน 10 MB',true);continue}blob=file;mime='application/pdf'}
-   else{blob=await shrink(file,f.plate,LBL[slot]||slot);mime='image/jpeg'}
+   else{const r=await shrink(file,f.plate,LBL[slot]||slot);blob=r.blob;mime='image/jpeg';
+    if(r.warn.length&&files.length===1){if(el)el.classList.remove('busy');if(!await askKeep(blob,r.warn,slot,multi))continue}
+    else if(r.fixed)toast('ปรับแสงให้อัตโนมัติแล้ว')}
    const k=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
    await IDB.put('photos',k,{month:f.month,dc:f.dc,plate:f.plate,slot,data:await blobB64(blob),mime,t:Date.now()});S.LOCAL[k]=URL.createObjectURL(blob);S.nPhotos++;
    const ref='l:'+k;if(multi){(f.photos[slot]=f.photos[slot]||[]).push(ref)}else f.photos[slot]=ref;
@@ -273,8 +300,9 @@ async function addFiles(files,slot,multi,f){
 $('#file-img').addEventListener('change',onFiles);$('#file-any').addEventListener('change',onFiles);
 
 async function trySave(){if(shrinking)return toast('กำลังเตรียมรูป รอสักครู่แล้วกดบันทึกอีกครั้ง');const f=S.form,m=missing(f);
- if(m.length){const sh=sheet(`<h2>ยังกรอกไม่ครบ ${m.length} รายการ</h2><p class="say">บันทึกไว้ก่อนได้ สถานะจะเป็น "ยังไม่ครบ" แล้วกลับมากรอกต่อภายหลัง</p><div class="btns"><button type="button" class="btn alt" id="m-go">ไปกรอกต่อ</button><button type="button" class="btn" id="m-save">บันทึกแบบยังไม่ครบ</button></div>`);
-  $('#m-go').onclick=()=>{closeSheet();jump(m[0][0])};$('#m-save').onclick=()=>{closeSheet();commit()};return}
+ if(m.length){/* every photo and item is required before sending; the draft stays on this phone */
+  const sh=sheet(`<h2>ต้องกรอกให้ครบก่อนส่ง</h2><p class="say">ยังขาด ${m.length} รายการ: ${m.slice(0,6).map(x=>esc(x[1])).join(', ')}${m.length>6?' …':''}</p><p class="say">งานที่ทำไว้เก็บในเครื่องแล้ว ออกไปแล้วกลับมาทำต่อได้</p><button type="button" class="btn gold" id="m-go">ไปกรอกรายการแรกที่ขาด</button>`);
+  $('#m-go').onclick=()=>{closeSheet();jump(m[0][0])};return}
  commit()}
 async function commit(){const f=S.form;clearTimeout(draftT);f.status=missing(f).length?'draft':'done';f.result=resultOf(f);f.updated=new Date().toISOString();f.inspector=(f.inspector||'').trim();
  if(f.inspector&&S.sess.name!==f.inspector){S.sess.name=f.inspector;LS.set('insp-sess',S.sess)}
@@ -289,19 +317,72 @@ function viewDetail(pl){const id=S.month+'|'+pl,r=S.pend[id]||S.recs[pl],c=S.car
  const bad=badList(r),cks=checksFor(r.type),m=missing(r),old=tyreOld(r.tyres);
  const pic=(k,l,ref)=>ref?`<button type="button" ${bg(ref,400)} data-pv="${esc(ref)}" data-lbl="${esc(l)}"${isPdf(ref)?' class="pdfb" style="background:var(--navy2);color:#fff"':''}>${isPdf(ref)?'PDF':''}<span>${esc(l)}</span></button>`:`<button type="button" class="miss" disabled><span>ไม่มีรูป · ${esc(l)}</span></button>`;
  $('#view').innerHTML=`<p class="eyebrow">ผลตรวจประจำเดือน ${mLabel(r.month)}</p><div class="page-h"><h1>${esc(pl)}</h1><div class="chips">${chipsOf(stateOf(pl))}</div></div>
+ <div class="rep-wrap">${repHtml(r)}</div>
  <div class="card"><dl class="dl"><dt>DC</dt><dd>${esc(dcName(r.dc))}</dd><dt>ชนิดรถ</dt><dd>${esc(TYN[r.type]||r.type)} · ${esc(GRP[r.grp]||r.grp)}</dd><dt>ผู้ตรวจ</dt><dd>${esc(r.inspector)}</dd><dt>เลขไมล์</dt><dd>${r.mile?fmt(r.mile)+' กม.':'-'}</dd><dt>บันทึกล่าสุด</dt><dd>${dtLabel(r.updated)}${r.by&&r.by.split(' @')[0]!==r.inspector?' · '+esc(r.by):''}</dd></dl>
  ${m.length?`<p class="say" style="margin-top:8px"><b class="badt">ยังขาด ${m.length} รายการ:</b> ${m.slice(0,8).map(x=>esc(x[1])).join(', ')}${m.length>8?' …':''}</p>`:''}</div>
  <div class="card"><h2>ผลการตรวจ</h2><div class="res">${bad.length?bad.map(k=>`<div><span class="b">✕ ${esc(CKL[k]||k)}</span><span>${esc(r.checks[k].n||'')}</span></div>`).join(''):''}<div><span class="g">✓ ปกติ ${cks.filter(([k])=>r.checks[k]&&r.checks[k].v==='ok').length} รายการ</span>${cks.length-bad.length-cks.filter(([k])=>r.checks[k]&&r.checks[k].v==='ok').length>0?`<span class="sub">ยังไม่ได้ตรวจ ${cks.length-bad.length-cks.filter(([k])=>r.checks[k]&&r.checks[k].v==='ok').length} รายการ</span>`:''}</div></div>
   <h2 style="margin-top:14px">ปียาง</h2><div class="res">${TY.map(([k,l])=>{const a=tyreAge(r.tyres[k]);return`<div><span style="min-width:72px">${l}</span><b>${esc(r.tyres[k]||'-')}</b>${a!=null?`<span class="${a>=MAXY?'badt':'good'}">อายุ ${ageTxt(a)}${a>=MAXY?' · ยางเก่า':''}</span>`:''}</div>`}).join('')}</div>
   <h2 style="margin-top:14px">สรุปความผิดปกติ</h2><p style="margin:4px 0 0">${r.issue.v==='has'?`<b class="badt">พบความผิดปกติ:</b> ${esc(r.issue.t)}`:r.issue.v==='none'?'<span class="good">ปกติ ไม่พบปัญหา</span>':'-'}</p></div>
- ${PHOTO.map(sec=>`<div class="card"><h2>${esc(sec.t)}</h2><div class="pg">${sec.s.map(([k,l])=>pic(k,l,r.photos[k])).join('')}</div></div>`).join('')}
  ${r.photos.damage.length?`<div class="card"><h2>ภาพจุดที่ผิดปกติ</h2><div class="pg">${r.photos.damage.map((x,i)=>pic('damage','จุดที่ผิดปกติ '+(i+1),x)).join('')}</div></div>`:''}
  ${r.photos.claim.length?`<div class="card"><h2>ใบเคลม / ประวัติรถ</h2><div class="pg">${r.photos.claim.map((x,i)=>pic('claim','ไฟล์ '+(i+1),x)).join('')}</div></div>`:''}`;
  hydrate($('#view'));$$('[data-pv]').forEach(b=>b.onclick=()=>viewPic(b.dataset.pv,b.dataset.lbl));
- const ab=$('#actbar');ab.hidden=false;ab.innerHTML=`${isAdmin()?`<button type="button" class="btn bad" id="d-del" style="flex:0 0 auto">ลบ</button>`:''}<button type="button" class="btn alt" id="d-share">${IC.share}แชร์สรุป</button>${canEdit()?`<button type="button" class="btn" id="d-edit">${IC.edit}แก้ไข</button>`:''}`;
+ const ab=$('#actbar');ab.hidden=false;ab.innerHTML=`${isAdmin()?`<button type="button" class="btn bad" id="d-del" style="flex:0 0 auto">ลบ</button>`:''}<button type="button" class="btn alt" id="d-img">${IC.share}รูปสรุป</button><button type="button" class="btn alt" id="d-share">ข้อความ</button>${canEdit()?`<button type="button" class="btn" id="d-edit">${IC.edit}แก้ไข</button>`:''}`;
+ $$('[data-rv]').forEach(b=>b.onclick=()=>viewPic(b.dataset.rv,b.dataset.lbl));
+ $('#d-img').onclick=()=>exportSheet(r);
  $('#d-share').onclick=()=>shareText(carText(r));if($('#d-edit'))$('#d-edit').onclick=()=>{S.form=null;go('form',{plate:pl},true)};
  if($('#d-del'))$('#d-del').onclick=()=>{const sh=sheet(`<h2>ลบผลตรวจ ${esc(pl)}?</h2><p class="say">ข้อมูลเดือน ${mLabel(r.month)} จะถูกลบจาก Google Sheet และรูปจะถูกย้ายไปถังขยะของ Google Drive (กู้คืนได้ภายใน 30 วัน)</p><div class="btns"><button type="button" class="btn alt" data-x2>ยกเลิก</button><button type="button" class="btn" id="dd-ok" style="background:var(--bad)">ลบ</button></div>`);
   sh.querySelector('[data-x2]').onclick=closeSheet;$('#dd-ok').onclick=async()=>{$('#dd-ok').disabled=true;try{await api({a:'del',id});delete S.recs[pl];delete S.pend[id];await IDB.del('outbox',id);if(S.pub)S.pub.st=S.pub.st.filter(x=>!(x[0]===r.month&&x[1]===pl));closeSheet();toast('ลบแล้ว');go('cars',{},true)}catch(e){toast('ลบไม่สำเร็จ: '+e.message,true);$('#dd-ok').disabled=false}}}}
+/* ---------- sheet layout (like the paper-form sample) ---------- */
+function repHtml(r){const secs=photoFor(r.type),car=S.carBy[r.plate]||{};
+ const ph=(k,l,cap)=>{const ref=r.photos[k];return ref?`<button type="button" class="rph" ${bg(ref,600)} data-rv="${esc(ref)}" data-lbl="${esc(l)}"><span>${esc(cap||l)}</span></button>`:`<div class="rph none"><span>ไม่มีรูป · ${esc(cap||l)}</span></div>`};
+ return`<div class="rep"><div class="rh"><div class="rl"><img src="logo.png" alt="NIM Express และ SEAL Gold Chain"></div><div class="rt"><b>สำรวจรถบริษัท<em>ทั่วประเทศ</em></b><div class="rp"><span>DC : <b>${esc(dcName(r.dc).replace(/^C?DC\s*/,''))}</b></span><span>ประเภท : <b>${esc(TYN[r.type]||r.type)}</b></span><span>ทะเบียน : <b>${esc(r.plate)}</b></span></div></div>
+  <div class="rhero" ${r.photos.front?bg(r.photos.front,800):''}><span>ตรวจ ${dtLabel(r.updated).replace(/\s\d+:\d+$/,'')} · ${esc(r.inspector)}${r.mile?' · '+fmt(r.mile)+' กม.':''}</span></div></div>
+ ${secs.map((s,i)=>`<div class="rs rs-${s.k}"><div class="rn" style="--c:${s.c}"><i>${i+1}</i>${esc(s.t)}</div><div class="rg n${s.s.length}">${s.s.map(([k,l])=>ph(k,l,s.k==='dot'?(r.tyres[k.slice(1)]||l):s.k==='tyre'?l.replace('ยาง',''):l)).join('')}</div></div>`).join('')}</div>`}
+async function imgFor(ref){if(!ref||isPdf(ref))return null;let src=null;
+ if(ref.startsWith('l:')&&S.LOCAL[ref.slice(2)])src=S.LOCAL[ref.slice(2)];
+ else{const id=driveId(ref);if(!id)return null;S.IMG=S.IMG||{};if(!S.IMG[id]){const j=await api({a:'img',id});S.IMG[id]=URL.createObjectURL(b64Blob(j.data,j.mime))}src=S.IMG[id]}
+ return await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=src})}
+/* 2000x1125 PNG of the sheet, drawn on a canvas (Prompt font, no html2canvas) */
+async function exportSheet(r){toast('กำลังสร้างรูปสรุป…');try{await document.fonts.load('600 40px Prompt');await document.fonts.load('500 20px Prompt')}catch(e){}
+ const W=2000,H=1125,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+ const rr=(X,Y,w,h,rad)=>{x.beginPath();x.roundRect(X,Y,w,h,rad)};const F=(w,s)=>`${w} ${s}px Prompt, sans-serif`;
+ const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#cfe0f7');g.addColorStop(1,'#eef4fc');x.fillStyle=g;x.fillRect(0,0,W,H);
+ const keys=['front','back','right','left','engine','battery','odo','tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare','cabin','boxF','boxB','curtain'];
+ const I={};let fail=0;await Promise.all(keys.map(async k=>{try{I[k]=await imgFor(r.photos[k])}catch(e){fail++}}));
+ const logo=await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src='logo.png'});
+ const cover=(img,X,Y,w,h,rad=10)=>{x.save();rr(X,Y,w,h,rad);x.clip();if(img){const s=Math.max(w/img.width,h/img.height),iw=img.width*s,ih=img.height*s;x.drawImage(img,X+(w-iw)/2,Y+(h-ih)/2,iw,ih)}else{x.fillStyle='#d9e2ef';x.fillRect(X,Y,w,h);x.fillStyle='#7a8aa5';x.font=F(500,20);x.textAlign='center';x.textBaseline='middle';x.fillText('ไม่มีรูป',X+w/2,Y+h/2)}x.restore()};
+ const panel=(X,Y,w,h)=>{x.fillStyle='rgba(255,255,255,.92)';rr(X,Y,w,h,18);x.fill()};
+ const cap=(t,X,Y,w,dark)=>{x.font=F(600,24);const tw=Math.min(w-20,x.measureText(t).width+60);x.fillStyle=dark?'#0a2a5e':'#f2f4f8';rr(X+(w-tw)/2,Y,tw,36,18);x.fill();x.fillStyle=dark?'#fff':'#0a2a5e';x.textAlign='center';x.textBaseline='middle';x.fillText(t,X+w/2,Y+19,w-30)};
+ const label=(n,t,X,Y,w,h,col)=>{x.fillStyle=col;rr(X,Y,w,h,h/2);x.fill();x.fillStyle='#0a2a5e';x.beginPath();x.arc(X+h/2+4,Y+h/2,h/2-4,0,7);x.fill();x.fillStyle='#fff';x.font=F(600,h*0.55);x.textAlign='center';x.textBaseline='middle';x.fillText(String(n),X+h/2+4,Y+h/2+2);x.fillStyle='#0a2a5e';x.textAlign='left';x.font=F(600,Math.min(34,h*0.5));const lines=t.split('\n');lines.forEach((ln,i)=>x.fillText(ln,X+h+18,Y+h/2+2+(i-(lines.length-1)/2)*h*0.42,w-h-30))};
+ /* header */
+ x.fillStyle='#fff';rr(24,12,370,144,22);x.fill();if(logo){const s=Math.min(330/logo.width,120/logo.height);x.drawImage(logo,24+(370-logo.width*s)/2,12+(144-logo.height*s)/2,logo.width*s,logo.height*s)}
+ x.fillStyle='#0a2a5e';rr(400,14,1000,96,48);x.fill();x.font=F(600,66);x.textBaseline='middle';x.textAlign='left';x.fillStyle='#fff';x.fillText('สำรวจรถบริษัท',440,64);const tw=x.measureText('สำรวจรถบริษัท').width;x.fillStyle='#f4c430';x.fillText('ทั่วประเทศ',440+tw,64);
+ x.fillStyle='#f6c945';rr(420,112,980,50,25);x.fill();x.fillStyle='#0a2a5e';x.font=F(600,30);const info=[`DC : ${dcName(r.dc).replace(/^C?DC\s*/,'')}`,`ประเภท : ${TYN[r.type]||r.type}`,`ทะเบียน : ${r.plate}`];info.forEach((t,i)=>{x.textAlign='center';x.fillText(t,420+980/6*(2*i+1),139,310)});
+ x.strokeStyle='rgba(10,42,94,.5)';x.lineWidth=2;[1,2].forEach(i=>{x.beginPath();x.moveTo(420+980/3*i,120);x.lineTo(420+980/3*i,154);x.stroke()});
+ cover(I.front,1420,12,560,188,16);x.fillStyle='rgba(6,26,61,.75)';rr(1420,160,560,40,0);x.fill();x.fillStyle='#fff';x.font=F(500,20);x.textAlign='center';x.fillText(`ตรวจ ${dtLabel(r.updated).replace(/\s\d+:\d+$/,'')} · ${r.inspector}${r.mile?' · '+fmt(r.mile)+' กม.':''}`,1700,181,540);
+ /* 1 four sides */
+ panel(16,172,1968,326);label(1,'ภาพรถ เต็มคัน 4 ด้าน',30,206,480,58,'#f4c430');
+ [['front','ด้านหน้า'],['back','ด้านหลัง'],['right','ด้านข้างขวา'],['left','ด้านข้างซ้าย']].forEach(([k,l],i)=>{const X=530+i*362,w=350;cover(I[k],X,206,w,248);cap(l,X,436,w,true)});
+ x.globalAlpha=1;
+ /* 2 engine */
+ panel(16,506,572,220);label(2,'ห้องเครื่อง / แบต / ไมล์',30,514,544,52,'#f28b7d');cover(I.engine,32,574,300,142);cover(I.battery,340,574,116,142);cover(I.odo,462,574,116,142);
+ /* 3 tyres */
+ panel(596,506,1388,220);label(3,'ยางถ่ายเต็มวง 4 เส้น',610,514,470,52,'#a8d86e');
+ [['tFL','หน้าซ้าย'],['tFR','หน้าขวา'],['tRL','หลังซ้าย'],['tRR','หลังขวา']].forEach(([k,l],i)=>{const X=612+i*342,w=330;cover(I[k],X,572,w,112);cap(l,X,684,w)});
+ /* 4 dot */
+ panel(16,734,1968,112);label(4,'ถ่ายเห็นปียาง',30,754,560,62,'#f7b23b');
+ TY.forEach(([k],i)=>{const X=612+i*342,w=330,a=tyreAge(r.tyres[k]),old=a!=null&&a>=MAXY;cover(I['d'+k],X,742,w,62,8);cap((r.tyres[k]||'-')+(old?' · ยางเก่า':''),X,806,w);if(old){x.strokeStyle='#b8334a';x.lineWidth=4;rr(X,742,w,62,8);x.stroke()}});
+ /* 5 spare + curtain */
+ panel(16,854,1968,92);label(5,'ยางอะไหล่',30,866,560,62,'#c58af0');cover(I.spare,612,860,520,80,8);
+ if(r.type==='042'||r.photos.curtain){label(8,'ม่านความเย็น',1160,866,380,62,'#9fb8ff');cover(I.curtain,1560,860,410,80,8)}
+ /* 6 cabin, 7 box */
+ panel(16,954,984,160);label(6,'ห้องโดยสาร',30,970,370,58,'#8cc8f5');cover(I.cabin,412,962,576,144);
+ panel(1008,954,976,160);label(7,'ภาพภายในตู้\nหน้า-หลัง',1018,966,350,82,'#6fdcd0');cover(I.boxF,1380,962,290,144);cover(I.boxB,1680,962,292,144);
+ const blob=await new Promise(res=>c.toBlob(res,'image/png'));const name=`NIMEX-Inspection-${r.plate}-${r.month}.png`;
+ if(fail)toast('บางรูปโหลดไม่ได้ ลองใหม่เมื่อมีสัญญาณ',true);
+ const file=new File([blob],name,{type:'image/png'});
+ if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return}catch(e){if(e.name==='AbortError')return}}
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('บันทึกรูปสรุปแล้ว')}
 function carText(r){const bad=badList(r),cks=checksFor(r.type),ok=cks.filter(([k])=>r.checks[k]&&r.checks[k].v==='ok').length;
  return[`🚚 ผลตรวจสภาพรถ ${r.plate}`,`📍 ${dcName(r.dc)} · ${TYN[r.type]||r.type}`,`🗓️ ${mLabel(r.month)} · ผู้ตรวจ ${r.inspector}`,r.mile?`🛣️ เลขไมล์ ${fmt(r.mile)} กม.`:'',
   r.result==='issue'?`⚠️ พบความผิดปกติ ${bad.length} รายการ`:'✅ ปกติ ไม่พบปัญหา',...bad.map((k,i)=>`  ${i+1}. ${CKL[k]}${r.checks[k].n?' — '+r.checks[k].n:''}`),
