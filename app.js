@@ -208,12 +208,12 @@ function catsOf(r){const bad=k=>r.checks&&r.checks[k]&&r.checks[k].v==='bad',cs=
  return{cam,tyre,body,box,any:r.result==='issue'||cam||tyre||body||box}}
 const ABCC=t=>t==='040'?'AB':t==='042'?'CC':'';
 function stateOf(pl){const id=S.month+'|'+pl,r=S.pend[id]||S.recs[pl]||null,d=S.drafts[id]||null;
- if(!r)return{k:d?'local':'none',d};const a=(S.appr||{})[id],c=a&&a.v?{...a.v,adm:1}:catsOf(r);return{k:r.status==='done'?'done':'draft',r,d,c,issue:c.any,old:c.tyre,pend:!!S.pend[id],ap:!!(S.appr||{})[id]}}
+ if(!r)return{k:d?'local':'none',d};const c=catsOf(r);return{k:r.status==='done'?'done':'draft',r,d,c,issue:c.any,old:c.tyre,pend:!!S.pend[id],ap:!!(S.appr||{})[id]}}
 function chipsOf(s){const c=[];if(s.k==='none')c.push('<span class="chip">ยังไม่ตรวจ</span>');if(s.k==='local')c.push('<span class="chip warn">ร่างในเครื่อง</span>');
  if(s.k==='draft')c.push('<span class="chip warn">ยังไม่ครบ</span>');if(s.k==='done')c.push('<span class="chip ok">ตรวจครบ</span>');
  if(s.issue)c.push('<span class="chip bad">ไม่ปกติ</span>');if(s.old)c.push('<span class="chip warn">ยางเก่า</span>');if(s.pend)c.push('<span class="chip gold">รอส่ง</span>');
- if(isAdmin()&&s.k==='done')c.push(s.ap?'<span class="chip ok">✓ ตรวจสอบแล้ว</span>':'<span class="chip gold">รอแอดมินตรวจสอบ</span>');return c.join('')}
-const AFILT=[['all','ทั้งหมด'],['none','ยังไม่ตรวจ'],['draft','ยังไม่ครบ'],['done','ตรวจครบ'],['ok','ปกติ'],['bad','ไม่ปกติ'],['cam','ไม่ปกติ: กล้องหน้ารถ'],['tyre','ไม่ปกติ: ยางรถยนต์'],['body','ไม่ปกติ: ภาพรอบคัน'],['box','ไม่ปกติ: ภายในตู้'],['wait','รอแอดมินตรวจสอบ'],['appr','ตรวจสอบแล้ว']];
+ if(isAdmin()&&s.k==='done')c.push(s.ap?'<span class="chip ok">✓ รูปขึ้น Catalog แล้ว</span>':'<span class="chip gold">รอส่งรูปขึ้น Catalog</span>');return c.join('')}
+const AFILT=[['all','ทั้งหมด'],['none','ยังไม่ตรวจ'],['draft','ยังไม่ครบ'],['done','ตรวจครบ'],['ok','ปกติ'],['bad','ไม่ปกติ'],['cam','ไม่ปกติ: กล้องหน้ารถ'],['tyre','ไม่ปกติ: ยางรถยนต์'],['body','ไม่ปกติ: ภาพรอบคัน'],['box','ไม่ปกติ: ภายในตู้'],['wait','รอส่งรูปขึ้น Catalog'],['appr','รูปขึ้น Catalog แล้ว']];
 function passF(f,s,c){if(f==='all')return true;if(f==='none')return s.k==='none';if(f==='draft')return s.k==='draft'||s.k==='local';if(s.k!=='done')return false;
  if(f==='done')return true;if(f==='ok')return!s.c.any;if(f==='bad')return s.c.any;if(f==='wait')return!s.ap;if(f==='appr')return s.ap;return!!s.c[f]}
 function viewCars(){const dc=S.dcSel||(S.sess&&S.sess.dc)||'all';S.dcSel=dc;const adm=isAdmin();if(!adm)S.month=monthNow();
@@ -360,21 +360,12 @@ function viewDetail(pl){const id=S.month+'|'+pl,r=S.pend[id]||S.recs[pl],c=S.car
  hydrate($('#view'));$$('[data-pv]').forEach(b=>b.onclick=()=>viewPic(b.dataset.pv,b.dataset.lbl));
  const ab=$('#actbar');ab.hidden=false;ab.innerHTML=`${isAdmin()?`<button type="button" class="btn bad" id="d-del" style="flex:0 0 auto">ลบ</button>`:''}<button type="button" class="btn alt" id="d-img">${IC.share}รูปสรุป</button><button type="button" class="btn alt" id="d-share">ข้อความ</button>${canEdit()?`<button type="button" class="btn" id="d-edit">${IC.edit}แก้ไข</button>`:''}`;
  $$('[data-rv]').forEach(b=>b.onclick=()=>viewPic(b.dataset.rv,b.dataset.lbl));
- if(isAdmin()&&!S.pend[id]){const ap=(S.appr||{})[id],calc=catsOf(r),box=document.createElement('div');box.className='card apbox';
-  /* admin final verdict: start from what the inspector entered; the admin can let a category pass (อนุโลม) */
-  const v=ap&&ap.v?{...ap.v}:{any:calc.any,cam:calc.cam,tyre:calc.tyre,body:calc.body,box:calc.box};let editing=!ap;
-  const VL=[['cam','กล้องหน้ารถ'],['tyre','ยางรถยนต์'],['body','ภาพรอบคัน'],['box','ภายในตู้ หน้า-หลัง'],['any','ผลรวมของรถคันนี้']];
-  const seg=(k,on)=>`<span class="seg2 vseg" data-vk="${k}"><button type="button" data-v="0" aria-pressed="${!on}">ปกติ</button><button type="button" data-v="1" aria-pressed="${on}" class="vb">ไม่ปกติ</button></span>`;
-  const paint=()=>{box.innerHTML=!editing?`<p><b class="good">✓ ตรวจสอบแล้ว</b> โดย ${esc(ap.by)} · ${dtLabel(ap.at)}<br><span class="say">ผลยืนยัน: <b class="${v.any?'badt':'good'}">${v.any?'ไม่ปกติ':'ปกติ'}</b>${VL.slice(0,4).filter(([k])=>v[k]).length?' · ไม่ปกติ: '+VL.slice(0,4).filter(([k])=>v[k]).map(x=>x[1]).join(', '):''}${ap.note?' · หมายเหตุ: '+esc(ap.note):''}</span><br><span class="say">รูปของการตรวจครั้งนี้แสดงใน Fleet Planning Catalog แล้ว</span></p><div class="btns"><button type="button" class="btn alt" id="ap-edit">แก้ผลยืนยัน</button><button type="button" class="btn alt" id="ap-off">ยกเลิกการตรวจสอบ</button></div>`
-   :`<h2 style="text-align:left">ยืนยันผลตรวจ (แอดมิน)</h2><p class="say">ค่าเริ่มต้นมาจากที่ผู้ตรวจกรอก ถ้าอนุโลมหมวดไหนให้กด "ปกติ" ผลนี้จะใช้ในหน้าสรุป Google Sheet และ Catalog</p>
-    <div class="vlist">${VL.map(([k,l])=>`<div class="vrow${k==='any'?' vall':''}"><span>${l}${k!=='any'&&calc[k]?' <small class="badt">(ผู้ตรวจพบ)</small>':''}</span>${seg(k,v[k])}</div>`).join('')}</div>
-    <div class="field"><input id="ap-note" placeholder="หมายเหตุ เช่น อนุโลมยางเก่า รอเปลี่ยนเดือนหน้า" value="${esc(ap&&ap.note||'')}"></div>
-    <button type="button" class="btn gold" id="ap-on"${r.status!=='done'?' disabled':''}>${IC.check}ยืนยันผล และส่งรูปขึ้น Catalog</button>${r.status!=='done'?'<p class="say">ต้องตรวจครบก่อนจึงยืนยันได้</p>':''}`;
-   box.querySelectorAll('[data-vk] button').forEach(b=>b.onclick=()=>{const k=b.parentElement.dataset.vk;v[k]=b.dataset.v==='1';if(k!=='any'&&v[k])v.any=true;paint()});
-   const on=box.querySelector('#ap-on'),off=box.querySelector('#ap-off'),ed=box.querySelector('#ap-edit');
-   if(on)on.onclick=()=>setAp(true);if(off)off.onclick=()=>setAp(false);if(ed)ed.onclick=()=>{editing=true;paint()}};
-  const setAp=async yes=>{try{const note=(box.querySelector('#ap-note')||{}).value||'';const j=await api({a:'appr',ids:[id],on:yes,v:yes?v:null,note});S.appr=j.appr;toast(yes?'ยืนยันแล้ว รูปจะขึ้น Catalog ภายในไม่กี่นาที':'ยกเลิกแล้ว');render(history.state,true)}catch(e){toast('ไม่สำเร็จ: '+e.message,true)}};
-  paint();$('#view').insertBefore(box,$('#view').children[2])}
+ if(isAdmin()&&!S.pend[id]){const ap=(S.appr||{})[id],box=document.createElement('div');box.className='card apbox';
+  /* the inspection result stays exactly as inspected; the admin only decides whether the photos go to the Catalog */
+  box.innerHTML=ap?`<p><b class="good">✓ ส่งรูปขึ้น Catalog แล้ว</b><br><span class="say">โดย ${esc(ap.by)} · ${dtLabel(ap.at)}</span></p><button type="button" class="btn alt" id="ap-off">เอารูปออกจาก Catalog</button>`
+   :`<p><b>ส่งรูปขึ้น Fleet Planning Catalog?</b><br><span class="say">ผลตรวจแสดงตามที่ผู้ตรวจกรอกเสมอ ปุ่มนี้แค่ตัดสินว่าจะเผยแพร่รูปของรถคันนี้ใน Catalog หรือไม่</span></p><button type="button" class="btn gold" id="ap-on"${r.status!=='done'?' disabled':''}>${IC.check}ตรวจสอบแล้ว ส่งรูปขึ้น Catalog</button>${r.status!=='done'?'<p class="say">ต้องตรวจครบก่อนจึงส่งได้</p>':''}`;
+  const setAp=async yes=>{try{const j=await api({a:'appr',ids:[id],on:yes});S.appr=j.appr;toast(yes?'ส่งแล้ว รูปจะขึ้น Catalog ภายในไม่กี่นาที':'เอารูปออกจาก Catalog แล้ว');render(history.state,true)}catch(e){toast('ไม่สำเร็จ: '+e.message,true)}};
+  $('#view').insertBefore(box,$('#view').children[2]);if($('#ap-on'))$('#ap-on').onclick=()=>setAp(true);if($('#ap-off'))$('#ap-off').onclick=()=>setAp(false)}
  $('#d-img').onclick=()=>exportSheet(r);
  $('#d-share').onclick=()=>shareText(carText(r));if($('#d-edit'))$('#d-edit').onclick=()=>{S.form=null;go('form',{plate:pl},true)};
  if($('#d-del'))$('#d-del').onclick=()=>{const sh=sheet(`<h2>ลบผลตรวจ ${esc(pl)}?</h2><p class="say">ข้อมูลเดือน ${mLabel(r.month)} จะถูกลบจาก Google Sheet และรูปจะถูกย้ายไปถังขยะของ Google Drive (กู้คืนได้ภายใน 30 วัน)</p><div class="btns"><button type="button" class="btn alt" data-x2>ยกเลิก</button><button type="button" class="btn" id="dd-ok" style="background:var(--bad)">ลบ</button></div>`);
@@ -453,12 +444,12 @@ function viewSum(){$('#ttl').textContent='สรุปการตรวจ';$('
  const row=(lbl,cs,attr,cls)=>{const a=aggSum(cs);return`<tr${attr||''}${cls?` class="${cls}"`:''}><td>${lbl}</td><td>${fmt(a.all.T)}</td><td>${fmt(a.done.T)}<span class="pbar"><i style="width:${pct(a.done.T,a.all.T)}"></i></span></td><td>${fmt(a.ok.T)}</td><td${a.bad.T?' class="badt"':''}>${fmt(a.bad.T)}</td><td>${a.none.T?fmt(a.none.T):'-'}</td><td>${a.wait.T?fmt(a.wait.T):'-'}</td></tr>`};
  const body=S.zones.map(z=>{const dcs=Object.values(S.dcs).filter(d=>d.zone===z).map(d=>[d,S.cars.filter(c=>c.dc===d.dc)]).filter(x=>x[1].length);if(!dcs.length)return'';
   return row(esc(z),dcs.flatMap(x=>x[1]),'','zone')+dcs.map(([d,cs])=>row(esc(d.name),cs,` data-dc="${d.dc}"`)).join('')}).join('');
- $('#view').innerHTML=`<p class="eyebrow">ตรวจสภาพรถประจำเดือน · เฉพาะผู้ดูแล</p><div class="page-h"><h1>สรุปทั่วประเทศ · ${mLabel(S.month)}</h1><p class="say">ตรวจครบ ${pct(A.done.T,A.all.T)} · รอแอดมินตรวจสอบ ${fmt(A.wait.T)} คัน · แตะการ์ดเพื่อดูรายชื่อรถ</p></div>
+ $('#view').innerHTML=`<p class="eyebrow">ตรวจสภาพรถประจำเดือน · เฉพาะผู้ดูแล</p><div class="page-h"><h1>สรุปทั่วประเทศ · ${mLabel(S.month)}</h1><p class="say">ตรวจครบ ${pct(A.done.T,A.all.T)} · รอส่งรูปขึ้น Catalog ${fmt(A.wait.T)} คัน · แตะการ์ดเพื่อดูรายชื่อรถ</p></div>
  <div class="kpis k8">${SUMK.slice(0,4).map((k,i)=>card(k,i===1?pct(A.done.T,A.all.T)+' ของรถทั้งหมด':'')).join('')}</div>
  <p class="eyebrow" style="margin:0">ไม่ปกติ แยกตามหมวด</p>
  <div class="kpis k8">${SUMK.slice(4).map(k=>card(k,SUMH[k[0]])).join('')}</div>
  <div class="tools"><select id="msel" aria-label="เดือน">${monthOpts()}</select><button type="button" class="btn alt" id="s-xl">${IC.share}Excel</button><button type="button" class="btn alt" id="s-txt">${IC.share}แชร์สรุป</button></div>
- <div class="card"><h2>แยกภาค / DC</h2><p class="note">แตะชื่อ DC เพื่อดูรายการรถ · ข้อมูลชุดเดียวกันนี้อยู่ใน Google Sheet แท็บ Summary และ Detail</p><div class="tw"><table class="t"><thead><tr><th>ภาค / DC</th><th>รถ</th><th>ตรวจครบ</th><th>ปกติ</th><th>ไม่ปกติ</th><th>ยังไม่ตรวจ</th><th>รอตรวจสอบ</th></tr></thead><tbody>${body}${row('รวม',S.cars,'','sum')}</tbody></table></div></div>`;
+ <div class="card"><h2>แยกภาค / DC</h2><p class="note">แตะชื่อ DC เพื่อดูรายการรถ · ข้อมูลชุดเดียวกันนี้อยู่ใน Google Sheet แท็บ Summary และ Detail</p><div class="tw"><table class="t"><thead><tr><th>ภาค / DC</th><th>รถ</th><th>ตรวจครบ</th><th>ปกติ</th><th>ไม่ปกติ</th><th>ยังไม่ตรวจ</th><th>รอส่งรูป</th></tr></thead><tbody>${body}${row('รวม',S.cars,'','sum')}</tbody></table></div></div>`;
  $('#msel').onchange=async e=>{S.month=e.target.value;try{await loadRecs(S.month)}catch(x){}viewSum()};
  $$('[data-kf]').forEach(b=>b.onclick=()=>{S.dcSel='all';S.filt=b.dataset.kf;go('cars')});
  $$('tr[data-dc]').forEach(tr=>tr.onclick=()=>{S.dcSel=tr.dataset.dc;S.filt='all';go('cars')});
