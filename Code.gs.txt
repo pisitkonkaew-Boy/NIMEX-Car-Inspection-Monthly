@@ -76,8 +76,8 @@ function catClear_(){CacheService.getScriptCache().remove('cat-v1')}
 /* ---------- รูปภาพใน Google Drive ---------- */
 function root_(){var p=props_(),id=p.getProperty('PHOTO_FOLDER_ID');if(id){try{return DriveApp.getFolderById(id)}catch(e){}}
  var f=DriveApp.createFolder('NIMEX Car Inspection Monthly Photos');p.setProperty('PHOTO_FOLDER_ID',f.getId());return f}
-function sub_(parent,name){var it=parent.getFoldersByName(name);return it.hasNext()?it.next():parent.createFolder(name)}
-function folderFor_(month,dc,plate){var key='fd-'+month+'-'+dc+'-'+plate,c=CacheService.getScriptCache(),id=c.get(key);if(id){try{return DriveApp.getFolderById(id)}catch(e){}}
+function sub_(parent,name){var it=parent.getFoldersByName(name);while(it.hasNext()){var f=it.next();if(!f.isTrashed())return f}return parent.createFolder(name)}
+function folderFor_(month,dc,plate){var key='fd-'+month+'-'+dc+'-'+plate,c=CacheService.getScriptCache(),id=c.get(key);if(id){try{var cf=DriveApp.getFolderById(id);if(!cf.isTrashed())return cf}catch(e){}}
  var lock=LockService.getScriptLock();lock.waitLock(20000);try{var dcs={};cars_(false).dcs.forEach(function(d){dcs[d[0]]=d[1]});
   var f=sub_(sub_(sub_(root_(),month),dc+' '+(dcs[dc]||'')),plate);c.put(key,f.getId(),21600);return f}finally{lock.releaseLock()}}
 

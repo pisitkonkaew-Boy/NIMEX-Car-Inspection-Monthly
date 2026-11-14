@@ -364,7 +364,7 @@ function viewDetail(pl){const id=S.month+'|'+pl,r=S.pend[id]||S.recs[pl],c=S.car
   /* the inspection result stays exactly as inspected; the admin only decides whether the photos go to the Catalog */
   box.innerHTML=ap?`<p><b class="good">✓ ส่งรูปขึ้น Catalog แล้ว</b><br><span class="say">โดย ${esc(ap.by)} · ${dtLabel(ap.at)}</span></p><button type="button" class="btn alt" id="ap-off">เอารูปออกจาก Catalog</button>`
    :`<p><b>ส่งรูปขึ้น Fleet Planning Catalog?</b><br><span class="say">ผลตรวจแสดงตามที่ผู้ตรวจกรอกเสมอ ปุ่มนี้แค่ตัดสินว่าจะเผยแพร่รูปของรถคันนี้ใน Catalog หรือไม่</span></p><button type="button" class="btn gold" id="ap-on"${r.status!=='done'?' disabled':''}>${IC.check}ตรวจสอบแล้ว ส่งรูปขึ้น Catalog</button>${r.status!=='done'?'<p class="say">ต้องตรวจครบก่อนจึงส่งได้</p>':''}`;
-  const setAp=async yes=>{try{const j=await api({a:'appr',ids:[id],on:yes});S.appr=j.appr;toast(yes?'ส่งแล้ว รูปจะขึ้น Catalog ภายในไม่กี่นาที':'เอารูปออกจาก Catalog แล้ว');render(history.state,true)}catch(e){toast('ไม่สำเร็จ: '+e.message,true)}};
+  const setAp=async yes=>{const b=box.querySelector('.btn');if(b){b.disabled=true;b.textContent='กำลังบันทึก…'}try{const j=await api({a:'appr',ids:[id],on:yes});S.appr=j.appr;toast(yes?'ส่งแล้ว รูปจะขึ้น Catalog ภายในไม่กี่นาที':'เอารูปออกจาก Catalog แล้ว');render(history.state,true)}catch(e){toast('ไม่สำเร็จ: '+e.message,true)}};
   $('#view').insertBefore(box,$('#view').children[2]);if($('#ap-on'))$('#ap-on').onclick=()=>setAp(true);if($('#ap-off'))$('#ap-off').onclick=()=>setAp(false)}
  $('#d-img').onclick=()=>exportSheet(r);
  $('#d-share').onclick=()=>shareText(carText(r));if($('#d-edit'))$('#d-edit').onclick=()=>{S.form=null;go('form',{plate:pl},true)};
