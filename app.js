@@ -32,7 +32,12 @@ const PHOTO=[
  {k:'spare',t:'ยางอะไหล่',c:'#c58af0',s:[['spare','ยางอะไหล่']]},
  {k:'cabin',t:'ห้องโดยสาร',c:'#8cc8f5',s:[['cabin','ห้องโดยสาร']]},
  {k:'box',t:'ภาพภายในตู้ หน้า-หลัง',c:'#6fdcd0',s:[['boxF','ภายในตู้ ด้านหน้า'],['boxB','ภายในตู้ ด้านหลัง']]},
- {k:'curtain',t:'ม่านความเย็น',c:'#9fb8ff',only:'042',s:[['curtain','ม่านความเย็น']]}];
+ {k:'curtain',t:'ม่านความเย็น',c:'#9fb8ff',only:'042',s:[['curtain','ม่านความเย็น']]},
+ {k:'cam',t:'กล้องหน้ารถ',c:'#ffb38a',s:[['dashcam','กล้องหน้ารถ']]}];
+/* dash camera status, stored as checks.dashcam = {v:'ok'|'bad'|'na', s:status, n:label} */
+const CAM=[['ok','มี ใช้งานได้'],['none','ไม่มีกล้อง'],['broken','มี แต่กล้องเสีย'],['card','มี แต่เมมโมรี่การ์ดเสีย']];
+const CAML=Object.fromEntries(CAM);
+const camS=f=>((f.checks||{}).dashcam||{}).s||'';
 const photoFor=t=>PHOTO.filter(s=>!s.only||s.only===t||!TYN[t]);
 /* example photos shown inside empty slots (from the paper form sample) */
 const GUIDE=new Set(['front','back','right','left','engine','tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare','cabin','boxF','boxB','curtain']);
@@ -45,19 +50,25 @@ const CHECKS=[
  ['dash','ไฟเตือนหน้าปัด','ไม่มีไฟเตือนค้าง'],['door','ประตูตู้ / ซีลยาง / กุญแจ'],
  ['reefer','ตู้เย็น (เครื่องทำความเย็น)','เฉพาะรถ 042 ควบคุมอุณหภูมิ',t=>t==='042'],
  ['curtain','ม่านความเย็น','ม่านครบ ไม่ขาด ไม่หลุดราง · เฉพาะรถ 042',t=>t==='042']];
-const CKL=Object.fromEntries(CHECKS.map(c=>[c[0],c[1]]));
+const CKL=Object.fromEntries(CHECKS.map(c=>[c[0],c[1]]));CKL.dashcam='กล้องหน้ารถ';
 const checksFor=t=>CHECKS.filter(c=>!c[3]||c[3](t)||!TYN[t]);
 function tyreAge(s){s=String(s||'');if(!/^\d{4}$/.test(s))return null;const wk=+s.slice(0,2),yr=2000+(+s.slice(2));if(wk<1||wk>53)return null;const a=(Date.now()-new Date(yr,0,1+(wk-1)*7))/31557600000;return a<-0.05?null:Math.max(0,a)}
 const ageTxt=a=>{const y=Math.floor(a),m=Math.floor((a-y)*12);return[y?y+' ปี':'',m||!y?m+' เดือน':''].filter(Boolean).join(' ')};
 const tyreOld=t=>TY.some(([k])=>{const a=tyreAge((t||{})[k]);return a!=null&&a>=MAXY});
+/* required / optional and notes come from the admin settings (Settings sheet, key "form") */
+const rq0=(c,k,d)=>{const r=((c||{}).req||{})[k];return r===undefined?d:!!r};
+const rq=(k,d)=>rq0(S.cfg,k,d),nt=k=>((S.cfg||{}).note||{})[k]||'';
 function missing(f){const m=[];
  if(!(f.inspector||'').trim())m.push(['info','ชื่อผู้ตรวจ']);
- photoFor(f.type).forEach(sec=>sec.s.forEach(([k,l])=>{if(!f.photos[k])m.push([sec.k,'รูป'+l])}));
- TY.forEach(([k,l])=>{if(tyreAge(f.tyres[k])==null)m.push(['dot','ปียาง'+l])});
- checksFor(f.type).forEach(([k,l])=>{if(!(f.checks[k]&&f.checks[k].v))m.push(['check',l])});
- if(!f.issue.v)m.push(['issue','สรุปความผิดปกติ']);else if(f.issue.v==='has'&&!(f.issue.t||'').trim())m.push(['issue','รายละเอียดความผิดปกติ']);
+ if(rq('mile',0)&&!String(f.mile||'').trim())m.push(['info','เลขไมล์']);
+ if(rq('cam',1)&&!camS(f))m.push(['cam','สถานะกล้องหน้ารถ']);
+ photoFor(f.type).forEach(sec=>sec.s.forEach(([k,l])=>{if(k==='dashcam'&&camS(f)==='none')return;if(rq(k,1)&&!f.photos[k])m.push([sec.k,'รูป'+l])}));
+ if(rq('tyres',1))TY.forEach(([k,l])=>{if(tyreAge(f.tyres[k])==null)m.push(['dot','ปียาง'+l])});
+ checksFor(f.type).forEach(([k,l])=>{if(rq('ck:'+k,1)&&!(f.checks[k]&&f.checks[k].v))m.push(['check',l])});
+ if(rq('issue',1)){if(!f.issue.v)m.push(['issue','สรุปความผิดปกติ']);else if(f.issue.v==='has'&&!(f.issue.t||'').trim())m.push(['issue','รายละเอียดความผิดปกติ'])}
+ else if(f.issue.v==='has'&&!(f.issue.t||'').trim())m.push(['issue','รายละเอียดความผิดปกติ']);
  return m}
-const totalItems=f=>1+photoFor(f.type).reduce((a,s)=>a+s.s.length,0)+TY.length+checksFor(f.type).length+1;
+const totalItems=f=>1+(rq('mile',0)?1:0)+(rq('cam',1)?1:0)+photoFor(f.type).reduce((a,s)=>a+s.s.filter(([k])=>rq(k,1)&&!(k==='dashcam'&&camS(f)==='none')).length,0)+(rq('tyres',1)?TY.length:0)+checksFor(f.type).filter(([k])=>rq('ck:'+k,1)).length+(rq('issue',1)?1:0);
 const badList=f=>Object.keys(f.checks||{}).filter(k=>f.checks[k]&&f.checks[k].v==='bad');
 const resultOf=f=>(f.issue&&f.issue.v==='has')||badList(f).length?'issue':'ok';
 
@@ -82,7 +93,7 @@ const dcName=dc=>S.dcs[dc]?S.dcs[dc].name:'DC '+dc;
 async function api(body,key){const s=S.sess||{};const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...body,key:key||s.key,who:s.name||'',wdc:s.dc||''})});
  const j=await r.json();if(!j.ok){const e=new Error(j.error||'failed');e.code=j.error;throw e}return j}
 async function loadPub(){try{const r=await fetch(API+(API.includes('?')?'&':'?')+'t='+Date.now());const j=await r.json();if(!j.cars)throw 0;await IDB.put('cache','pub',j);return j}catch(e){const c=await IDB.get('cache','pub');if(c){c.stale=1;return c}throw e}}
-function setPub(p){S.pub=p;S.cars=p.cars.map(c=>({pl:c[0],ty:c[1],yr:c[2],dc:String(c[3]),g:c[4]}));S.carBy=Object.fromEntries(S.cars.map(c=>[c.pl,c]));
+function setPub(p){S.pub=p;S.cfg=(p.cfg&&p.cfg.form)||{};S.cars=p.cars.map(c=>({pl:c[0],ty:c[1],yr:c[2],dc:String(c[3]),g:c[4]}));S.carBy=Object.fromEntries(S.cars.map(c=>[c.pl,c]));
  S.dcs={};S.zones=[];p.dcs.forEach(d=>{S.dcs[String(d[0])]={dc:String(d[0]),name:d[1],zone:d[2]};if(!S.zones.includes(d[2]))S.zones.push(d[2])});
  S.cars.forEach(c=>{if(!S.dcs[c.dc]){S.dcs[c.dc]={dc:c.dc,name:'DC '+c.dc,zone:'อื่นๆ'};if(!S.zones.includes('อื่นๆ'))S.zones.push('อื่นๆ')}})}
 const norm=r=>{r.photos=r.photos||{};r.photos.damage=r.photos.damage||[];r.photos.claim=r.photos.claim||[];r.checks=r.checks||{};r.tyres=r.tyres||{};r.issue=r.issue&&typeof r.issue==='object'?r.issue:{v:'',t:''};return r};
@@ -171,8 +182,8 @@ function monthOpts(){const ms=new Set([monthNow()]);(S.pub?S.pub.st:[]).forEach(
 function dcOpts(sel,withAll){return(withAll?`<option value="all"${sel==='all'?' selected':''}>ทุก DC</option>`:'')+S.zones.map(z=>`<optgroup label="${esc(z)}">${Object.values(S.dcs).filter(d=>d.zone===z&&(d.dc===sel||S.cars.some(c=>c.dc===d.dc))).map(d=>`<option value="${d.dc}"${d.dc===sel?' selected':''}>${esc(d.name)} (${S.cars.filter(c=>c.dc===d.dc).length})</option>`).join('')}</optgroup>`).join('')}
 
 /* ---------- navigation ---------- */
-const NAV=[['cars','ตรวจรถ',IC.car],['sum','สรุป',IC.chart]];
-function navHtml(){const items=NAV.filter(n=>n[0]!=='cars'||isStaff());const cur=S.view==='form'||S.view==='detail'?'cars':S.view;return items.map(([k,t,i])=>`<button type="button" data-nav="${k}"${cur===k?' aria-current="page"':''}>${i}<span>${t}</span></button>`).join('')}
+const NAV=[['cars','ตรวจรถ',IC.car],['sum','สรุป',IC.chart],['set','ตั้งค่า',IC.edit]];
+function navHtml(){const items=NAV.filter(n=>n[0]==='sum'||(n[0]==='cars'&&isStaff())||(n[0]==='set'&&isAdmin()));const cur=S.view==='form'||S.view==='detail'?'cars':S.view;return items.map(([k,t,i])=>`<button type="button" data-nav="${k}"${cur===k?' aria-current="page"':''}>${i}<span>${t}</span></button>`).join('')}
 function go(v,p={},replace){const st={v,...p};history[replace?'replaceState':'pushState'](st,'');render(st)}
 window.addEventListener('popstate',e=>{closeSheet();render(e.state||{v:home()})});
 const home=()=>isStaff()?'cars':'sum';
@@ -182,7 +193,7 @@ async function render(st,soft){const v=st.v||home();
  $('#tab').innerHTML=navHtml();$('#rail-nav').innerHTML=navHtml();$('#back').hidden=!(v==='form'||v==='detail');
  $('#actbar').hidden=true;$('#actbar').innerHTML='';
  const keepY=soft?scrollY:0;
- if(v==='cars')viewCars();else if(v==='sum')viewSum();else if(v==='detail')viewDetail(st.plate);else if(v==='form')viewForm();
+ if(v==='cars')viewCars();else if(v==='sum')viewSum();else if(v==='detail')viewDetail(st.plate);else if(v==='form')viewForm();else if(v==='set'&&isAdmin())viewSet();
  if(!soft)scrollTo(0,0);else scrollTo(0,keepY);updSync()}
 document.addEventListener('click',e=>{const n=e.target.closest('[data-nav]');if(n){if(n.dataset.nav!==S.view)go(n.dataset.nav)}});
 $('#back').onclick=()=>{if(history.state&&history.length>1)history.back();else go(home(),{},true)};
@@ -223,7 +234,8 @@ async function openForm(pl){const c=S.carBy[pl];if(!c||!canEdit())return false;c
  if(!S.form.inspector)S.form.inspector=S.sess.name||'';return true}
 function saveDraft(){clearTimeout(draftT);draftT=setTimeout(()=>{if(!S.form)return;S.drafts[S.form.id]=JSON.parse(JSON.stringify(S.form));IDB.put('drafts',S.form.id,S.drafts[S.form.id])},300)}
 function slotHtml(k,label,ref,multiKey,idx){
- if(!ref)return GUIDE.has(k)&&!multiKey?`<div class="slot ex" data-slot="${k}" role="button" tabindex="0" aria-label="ถ่าย${esc(label)}" style="background-image:url('guide/${k}.jpg')"><span class="exb">ตัวอย่าง</span><button type="button" class="exv" data-ex="${k}" aria-label="ดูตัวอย่าง ${esc(label)}">⤢</button>${IC.cam}<span class="exl">แตะเพื่อถ่าย · ${esc(label)}</span></div>`:`<button type="button" class="slot" data-slot="${k}">${IC.cam}<span>${esc(label)}</span></button>`;
+ const opt=k==='dashcam'&&S.form&&camS(S.form)==='none'?' · ไม่ต้องถ่าย (ไม่มีกล้อง)':!multiKey&&LBL[k]&&!['damage','claim'].includes(k)&&!rq(k,1)?' · ไม่บังคับ':'';
+ if(!ref)return GUIDE.has(k)&&!multiKey?`<div class="slot ex" data-slot="${k}" role="button" tabindex="0" aria-label="ถ่าย${esc(label)}" style="background-image:url('guide/${k}.jpg')"><span class="exb">ตัวอย่าง</span><button type="button" class="exv" data-ex="${k}" aria-label="ดูตัวอย่าง ${esc(label)}">⤢</button>${IC.cam}<span class="exl">แตะเพื่อถ่าย · ${esc(label)}${opt}</span></div>`:`<button type="button" class="slot" data-slot="${k}">${IC.cam}<span>${esc(label)}${opt}</span></button>`;
  const wait=ref.startsWith('l:')&&!S.MAP[ref.slice(2)];
  return`<div class="slot has${isPdf(ref)?' pdf':''}" ${bg(ref,400)} data-view="${esc(ref)}" data-lbl="${esc(label)}">${isPdf(ref)?IC.file+'<span>PDF</span>':''}<span class="st${wait?' wait':''}">${wait?'รอส่ง':'✓ ส่งแล้ว'}</span><button type="button" class="x" data-rm="${k}"${multiKey?` data-i="${idx}"`:''} aria-label="ลบรูป ${esc(label)}">✕</button><span class="cap">${esc(label)}</span></div>`}
 function multiHtml(k){const arr=S.form.photos[k]||[];return arr.map((r,i)=>slotHtml(k,LBL[k]+' '+(i+1),r,k,i)).join('')+`<button type="button" class="slot" data-slot="${k}" data-multi="1">${IC.plus}<span>เพิ่ม${k==='claim'?'รูป / PDF':'รูป'}</span></button>`}
@@ -232,19 +244,22 @@ function viewForm(){const f=S.form,c=S.carBy[f.plate];
  $('#ttl').textContent=f.plate;$('#sub').textContent='ตรวจประจำเดือน '+mLabel(f.month)+' · '+dcName(f.dc);
  let n=1;const H=(key,t,cnt)=>`<h2><span class="n${secDone(f,key)?' done':''}" data-sec="${key}">${n++}</span>${t}${cnt?`<span class="cnt">${cnt}</span>`:''}</h2>`;
  $('#view').innerHTML=`<div class="prog"><div class="bar2"><i id="pbar"></i></div><div class="t"><span id="ptxt"></span><button type="button" id="pmiss" class="lnk" style="border:0;background:none;color:var(--navy2);text-decoration:underline;padding:0;font-size:12.5px"></button></div></div>
+ ${(S.cfg||{}).general?`<div class="gnote">${IC.file.replace('<svg','<svg width="18" height="18"')}<span>${esc(S.cfg.general).replace(/\n/g,'<br>')}</span></div>`:''}
  <section class="sec" id="sec-info">${H('info','ข้อมูลรถ')}<div class="body"><div class="row2"><div class="field"><label class="l">ทะเบียน</label><input readonly value="${esc(f.plate)}"></div><div class="field"><label class="l">DC</label><input readonly value="${esc(dcName(f.dc))}"></div></div>
   <div class="row2"><div class="field"><label class="l">ชนิดรถ</label><input readonly value="${esc(TYN[f.type]||f.type)}"></div><div class="field"><label class="l">กลุ่ม / ปีรถ</label><input readonly value="${esc((GRP[f.grp]||f.grp)+(c&&c.yr?' · '+c.yr:''))}"></div></div>
-  <div class="row2"><div class="field"><label class="l" for="f-insp">ผู้ตรวจ <span class="req">*</span></label><input id="f-insp" data-f="inspector" value="${esc(f.inspector)}" autocomplete="name"></div><div class="field"><label class="l" for="f-mile">เลขไมล์ (กม.)</label><input id="f-mile" data-f="mile" inputmode="numeric" pattern="[0-9]*" value="${esc(f.mile)}" placeholder="ไม่บังคับ"></div></div></div></section>
- ${photoFor(f.type).map(sec=>`<section class="sec" id="sec-${sec.k}" style="--sc:${sec.c}">${H(sec.k,sec.t,sec.k==='dot'?'ใส่เลข 4 หลัก สัปดาห์+ปี เช่น 4523':sec.only?'เฉพาะรถ 042 CC':'')}<div class="body"><div class="slots">${sec.s.map(([k,l])=>slotHtml(k,l,f.photos[k])).join('')}</div>${sec.k==='dot'?`<div class="tyre">${TY.map(([k,l])=>`<div class="field"><label class="l" for="ty-${k}">ปียาง ${l} <span class="req">*</span></label><input id="ty-${k}" data-ty="${k}" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="WWYY" value="${esc(f.tyres[k]||'')}"><div class="age" id="age-${k}"></div></div>`).join('')}</div>`:''}</div></section>`).join('')}
- <section class="sec" id="sec-check">${H('check','รายการตรวจ ปกติ / ผิดปกติ',checksFor(f.type).length+' รายการ')}<div class="body"><button type="button" class="allok" id="allok">${IC.check.replace('<svg','<svg width="16" height="16" style="vertical-align:-3px"')} ที่เหลือปกติทั้งหมด</button><div class="ck">${checksFor(f.type).map(([k,l,h])=>ckRow(k,l,h)).join('')}</div></div></section>
- <section class="sec" id="sec-issue">${H('issue','สรุปความผิดปกติ / สิ่งที่ต้องดำเนินการ')}<div class="body"><div class="seg3"><button type="button" data-iss="none" data-v="none" aria-pressed="${f.issue.v==='none'}">ปกติ ไม่พบปัญหา</button><button type="button" data-iss="has" data-v="has" aria-pressed="${f.issue.v==='has'}">พบความผิดปกติ</button></div>
+  <div class="row2"><div class="field"><label class="l" for="f-insp">ผู้ตรวจ <span class="req">*</span></label><input id="f-insp" data-f="inspector" value="${esc(f.inspector)}" autocomplete="name"></div><div class="field"><label class="l" for="f-mile">เลขไมล์ (กม.) ${rq('mile',0)?'<span class="req">*</span>':''}</label><input id="f-mile" data-f="mile" inputmode="numeric" pattern="[0-9]*" value="${esc(f.mile)}" placeholder="${rq('mile',0)?'':'ไม่บังคับ'}"></div></div>${noteHtml('mile')}</div></section>
+ ${photoFor(f.type).map(sec=>`<section class="sec" id="sec-${sec.k}" style="--sc:${sec.c}">${H(sec.k,sec.t,sec.k==='dot'?'ใส่เลข 4 หลัก สัปดาห์+ปี เช่น 4523':sec.only?'เฉพาะรถ 042 CC':'')}<div class="body">${noteHtml('sec:'+sec.k)}${sec.k==='cam'?camHtml(f):''}<div class="slots">${sec.s.map(([k,l])=>slotHtml(k,l,f.photos[k])).join('')}</div>${sec.s.map(([k,l])=>nt(k)?`<p class="hint"><b>${esc(l)}:</b> ${esc(nt(k))}</p>`:'').join('')}${sec.k==='dot'?noteHtml('tyres')+`<div class="tyre">${TY.map(([k,l])=>`<div class="field"><label class="l" for="ty-${k}">ปียาง ${l} ${rq('tyres',1)?'<span class="req">*</span>':'<small>(ไม่บังคับ)</small>'}</label><input id="ty-${k}" data-ty="${k}" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="WWYY" value="${esc(f.tyres[k]||'')}"><div class="age" id="age-${k}"></div></div>`).join('')}</div>`:''}</div></section>`).join('')}
+ <section class="sec" id="sec-check">${H('check','รายการตรวจ ปกติ / ผิดปกติ',checksFor(f.type).length+' รายการ')}<div class="body">${noteHtml('sec:check')}<button type="button" class="allok" id="allok">${IC.check.replace('<svg','<svg width="16" height="16" style="vertical-align:-3px"')} ที่เหลือปกติทั้งหมด</button><div class="ck">${checksFor(f.type).map(([k,l,h])=>ckRow(k,l,h)).join('')}</div></div></section>
+ <section class="sec" id="sec-issue">${H('issue','สรุปความผิดปกติ / สิ่งที่ต้องดำเนินการ')}<div class="body">${noteHtml('issue')}<div class="seg3"><button type="button" data-iss="none" data-v="none" aria-pressed="${f.issue.v==='none'}">ปกติ ไม่พบปัญหา</button><button type="button" data-iss="has" data-v="has" aria-pressed="${f.issue.v==='has'}">พบความผิดปกติ</button></div>
   <div class="field" id="iss-wrap"${f.issue.v==='has'?'':' hidden'}><label class="l" for="f-iss">รายละเอียด <span class="req">*</span></label><textarea id="f-iss" data-iss-t placeholder="เช่น กันชนหลังแตก ไฟเบรกซ้ายไม่ติด">${esc(f.issue.t||'')}</textarea></div>
   <div class="field"><label class="l">ภาพจุดที่ผิดปกติ</label><div class="slots" id="multi-damage">${multiHtml('damage')}</div></div></div></section>
  <section class="sec" id="sec-claim">${H('claim','แนบใบเคลม / ประวัติรถ','ถ้ามี')}<div class="body"><div class="sub">ถ่ายภาพเต็มใบ หรือแนบไฟล์ PDF</div><div class="slots" id="multi-claim">${multiHtml('claim')}</div></div></section>`;
  TY.forEach(([k])=>ageShow(k));hydrate($('#view'));updProg();
  const ab=$('#actbar');ab.hidden=false;ab.innerHTML=`<button type="button" class="btn alt" id="f-cancel">ไว้ทีหลัง</button><button type="button" class="btn gold" id="f-save">${IC.check}บันทึกและส่ง</button>`;
  $('#f-cancel').onclick=()=>{saveDraft();toast('เก็บร่างไว้ในเครื่องแล้ว');$('#back').click()};$('#f-save').onclick=trySave}
-function ckRow(k,l,h){const v=S.form.checks[k]||{};return`<div class="ckr${v.v==='bad'?' isbad':''}" id="ck-${k}"><span class="nm">${esc(l)}${h?`<small>${esc(h)}</small>`:''}</span><span class="tg"><button type="button" class="ok" data-ck="${k}" data-v="ok" aria-pressed="${v.v==='ok'}">ปกติ</button><button type="button" class="bad" data-ck="${k}" data-v="bad" aria-pressed="${v.v==='bad'}">ผิดปกติ</button></span>${v.v==='bad'?`<input data-ckn="${k}" placeholder="ระบุอาการ เช่น ไฟเบรกซ้ายไม่ติด" value="${esc(v.n||'')}" aria-label="อาการ ${esc(l)}">`:''}</div>`}
+function camHtml(f){const s=camS(f);return`<div class="camseg" role="group" aria-label="สถานะกล้องหน้ารถ">${CAM.map(([v,l])=>`<button type="button" data-cam="${v}" class="c-${v}" aria-pressed="${s===v}">${l}</button>`).join('')}</div>`}
+const noteHtml=k=>nt(k)?`<p class="hint">${esc(nt(k)).replace(/\n/g,'<br>')}</p>`:'';
+function ckRow(k,l,h){const v=S.form.checks[k]||{},n=nt('ck:'+k),opt=!rq('ck:'+k,1);return`<div class="ckr${v.v==='bad'?' isbad':''}" id="ck-${k}"><span class="nm">${esc(l)}${opt?' <small style="display:inline">(ไม่บังคับ)</small>':''}${h?`<small>${esc(h)}</small>`:''}${n?`<small class="hn">${esc(n)}</small>`:''}</span><span class="tg"><button type="button" class="ok" data-ck="${k}" data-v="ok" aria-pressed="${v.v==='ok'}">ปกติ</button><button type="button" class="bad" data-ck="${k}" data-v="bad" aria-pressed="${v.v==='bad'}">ผิดปกติ</button></span>${v.v==='bad'?`<input data-ckn="${k}" placeholder="ระบุอาการ เช่น ไฟเบรกซ้ายไม่ติด" value="${esc(v.n||'')}" aria-label="อาการ ${esc(l)}">`:''}</div>`}
 function ageShow(k){const el=$('#age-'+k);if(!el)return;const s=S.form.tyres[k]||'';if(!s){el.innerHTML='';return}const a=tyreAge(s);
  el.innerHTML=a==null?(s.length<4?'':'<span class="badt">รูปแบบไม่ถูกต้อง</span>'):(a>=MAXY?`<span class="badt">อายุ ${ageTxt(a)} · ยางเก่า</span>`:`<span class="good">อายุ ${ageTxt(a)}</span>`)}
 function updProg(){if(!$('#pbar')||!S.form)return;const f=S.form,m=missing(f),t=totalItems(f),p=Math.round((t-m.length)/t*100);
@@ -264,7 +279,11 @@ $('#view').addEventListener('click',e=>{if(S.view!=='form')return;const t=e.targ
  const ck=t.closest('[data-ck]');if(ck){const k=ck.dataset.ck,v=ck.dataset.v,cur=S.form.checks[k]||{};S.form.checks[k]={v:cur.v===v?'':v,n:cur.n||''};$('#ck-'+k).outerHTML=ckRow(k,CKL[k],(CHECKS.find(c=>c[0]===k)||[])[2]);
   if(S.form.checks[k].v==='bad'){const i=$(`[data-ckn="${k}"]`);if(i)i.focus();if(!S.form.issue.v)setIssue('has')}changed();return}
  if(t.closest('#allok')){checksFor(S.form.type).forEach(([k,l,h])=>{if(!(S.form.checks[k]&&S.form.checks[k].v)){S.form.checks[k]={v:'ok',n:''};$('#ck-'+k).outerHTML=ckRow(k,l,h)}});changed();return}
+ if(t.closest('[data-ck]'))return;
  const is=t.closest('[data-iss]');if(is){setIssue(is.dataset.iss);changed();return}
+ const cm=t.closest('[data-cam]');if(cm){const v=cm.dataset.cam;S.form.checks.dashcam={v:v==='ok'?'ok':v==='none'?'na':'bad',s:v,n:CAML[v]};
+  $$('[data-cam]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.cam===v));const sl=$('#sec-cam .slots');if(sl){sl.innerHTML=slotHtml('dashcam',LBL.dashcam,S.form.photos.dashcam);hydrate(sl)}
+  if(v==='broken'||v==='card'){if(!S.form.issue.v)setIssue('has')}changed();return}
  if(t.closest('#pmiss'))showMissing()});
 function setIssue(v){S.form.issue.v=v;$$('[data-iss]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.iss===v));$('#iss-wrap').hidden=v!=='has';if(v==='has'&&!S.form.issue.t){const bad=badList(S.form).map(k=>CKL[k]+(S.form.checks[k].n?' ('+S.form.checks[k].n+')':''));if(bad.length){S.form.issue.t=bad.join(', ');$('#f-iss').value=S.form.issue.t}}}
 $('#view').addEventListener('input',e=>{if(S.view!=='form')return;const t=e.target;
@@ -318,7 +337,7 @@ function viewDetail(pl){const id=S.month+'|'+pl,r=S.pend[id]||S.recs[pl],c=S.car
  const pic=(k,l,ref)=>ref?`<button type="button" ${bg(ref,400)} data-pv="${esc(ref)}" data-lbl="${esc(l)}"${isPdf(ref)?' class="pdfb" style="background:var(--navy2);color:#fff"':''}>${isPdf(ref)?'PDF':''}<span>${esc(l)}</span></button>`:`<button type="button" class="miss" disabled><span>ไม่มีรูป · ${esc(l)}</span></button>`;
  $('#view').innerHTML=`<p class="eyebrow">ผลตรวจประจำเดือน ${mLabel(r.month)}</p><div class="page-h"><h1>${esc(pl)}</h1><div class="chips">${chipsOf(stateOf(pl))}</div></div>
  <div class="rep-wrap">${repHtml(r)}</div>
- <div class="card"><dl class="dl"><dt>DC</dt><dd>${esc(dcName(r.dc))}</dd><dt>ชนิดรถ</dt><dd>${esc(TYN[r.type]||r.type)} · ${esc(GRP[r.grp]||r.grp)}</dd><dt>ผู้ตรวจ</dt><dd>${esc(r.inspector)}</dd><dt>เลขไมล์</dt><dd>${r.mile?fmt(r.mile)+' กม.':'-'}</dd><dt>บันทึกล่าสุด</dt><dd>${dtLabel(r.updated)}${r.by&&r.by.split(' @')[0]!==r.inspector?' · '+esc(r.by):''}</dd></dl>
+ <div class="card"><dl class="dl"><dt>DC</dt><dd>${esc(dcName(r.dc))}</dd><dt>ชนิดรถ</dt><dd>${esc(TYN[r.type]||r.type)} · ${esc(GRP[r.grp]||r.grp)}</dd><dt>ผู้ตรวจ</dt><dd>${esc(r.inspector)}</dd><dt>เลขไมล์</dt><dd>${r.mile?fmt(r.mile)+' กม.':'-'}</dd><dt>กล้องหน้ารถ</dt><dd${['broken','card'].includes(camS(r))?' class="badt"':''}>${esc(CAML[camS(r)]||'-')}</dd><dt>บันทึกล่าสุด</dt><dd>${dtLabel(r.updated)}${r.by&&r.by.split(' @')[0]!==r.inspector?' · '+esc(r.by):''}</dd></dl>
  ${m.length?`<p class="say" style="margin-top:8px"><b class="badt">ยังขาด ${m.length} รายการ:</b> ${m.slice(0,8).map(x=>esc(x[1])).join(', ')}${m.length>8?' …':''}</p>`:''}</div>
  <div class="card"><h2>ผลการตรวจ</h2><div class="res">${bad.length?bad.map(k=>`<div><span class="b">✕ ${esc(CKL[k]||k)}</span><span>${esc(r.checks[k].n||'')}</span></div>`).join(''):''}<div><span class="g">✓ ปกติ ${cks.filter(([k])=>r.checks[k]&&r.checks[k].v==='ok').length} รายการ</span>${cks.length-bad.length-cks.filter(([k])=>r.checks[k]&&r.checks[k].v==='ok').length>0?`<span class="sub">ยังไม่ได้ตรวจ ${cks.length-bad.length-cks.filter(([k])=>r.checks[k]&&r.checks[k].v==='ok').length} รายการ</span>`:''}</div></div>
   <h2 style="margin-top:14px">ปียาง</h2><div class="res">${TY.map(([k,l])=>{const a=tyreAge(r.tyres[k]);return`<div><span style="min-width:72px">${l}</span><b>${esc(r.tyres[k]||'-')}</b>${a!=null?`<span class="${a>=MAXY?'badt':'good'}">อายุ ${ageTxt(a)}${a>=MAXY?' · ยางเก่า':''}</span>`:''}</div>`}).join('')}</div>
@@ -347,7 +366,7 @@ async function exportSheet(r){toast('กำลังสร้างรูปส�
  const W=2000,H=1125,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
  const rr=(X,Y,w,h,rad)=>{x.beginPath();x.roundRect(X,Y,w,h,rad)};const F=(w,s)=>`${w} ${s}px Prompt, sans-serif`;
  const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#cfe0f7');g.addColorStop(1,'#eef4fc');x.fillStyle=g;x.fillRect(0,0,W,H);
- const keys=['front','back','right','left','engine','battery','odo','tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare','cabin','boxF','boxB','curtain'];
+ const keys=['front','back','right','left','engine','battery','odo','tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare','cabin','boxF','boxB','curtain','dashcam'];
  const I={};let fail=0;await Promise.all(keys.map(async k=>{try{I[k]=await imgFor(r.photos[k])}catch(e){fail++}}));
  const logo=await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src='logo.png'});
  const cover=(img,X,Y,w,h,rad=10)=>{x.save();rr(X,Y,w,h,rad);x.clip();if(img){const s=Math.max(w/img.width,h/img.height),iw=img.width*s,ih=img.height*s;x.drawImage(img,X+(w-iw)/2,Y+(h-ih)/2,iw,ih)}else{x.fillStyle='#d9e2ef';x.fillRect(X,Y,w,h);x.fillStyle='#7a8aa5';x.font=F(500,20);x.textAlign='center';x.textBaseline='middle';x.fillText('ไม่มีรูป',X+w/2,Y+h/2)}x.restore()};
@@ -373,8 +392,10 @@ async function exportSheet(r){toast('กำลังสร้างรูปส�
  panel(16,734,1968,112);label(4,'ถ่ายเห็นปียาง',30,754,560,62,'#f7b23b');
  TY.forEach(([k],i)=>{const X=612+i*342,w=330,a=tyreAge(r.tyres[k]),old=a!=null&&a>=MAXY;cover(I['d'+k],X,742,w,62,8);cap((r.tyres[k]||'-')+(old?' · ยางเก่า':''),X,806,w);if(old){x.strokeStyle='#b8334a';x.lineWidth=4;rr(X,742,w,62,8);x.stroke()}});
  /* 5 spare + curtain */
- panel(16,854,1968,92);label(5,'ยางอะไหล่',30,866,560,62,'#c58af0');cover(I.spare,612,860,520,80,8);
- if(r.type==='042'||r.photos.curtain){label(8,'ม่านความเย็น',1160,866,380,62,'#9fb8ff');cover(I.curtain,1560,860,410,80,8)}
+ panel(16,854,1968,92);label(5,'ยางอะไหล่',30,866,560,62,'#c58af0');cover(I.spare,612,860,360,80,8);
+ const cc=r.type==='042'||r.photos.curtain,cs=camS(r),camBad=cs==='broken'||cs==='card';
+ label(cc?9:8,'กล้องหน้า · '+(CAML[cs]||'-'),990,866,cc?470:560,62,camBad?'#f28b7d':'#ffb38a');if(cs!=='none')cover(I.dashcam,cc?1470:1560,860,cc?150:410,80,8);
+ if(cc){label(8,'ม่านความเย็น',1630,866,190,62,'#9fb8ff');cover(I.curtain,1830,860,140,80,8)}
  /* 6 cabin, 7 box */
  panel(16,954,984,160);label(6,'ห้องโดยสาร',30,970,370,58,'#8cc8f5');cover(I.cabin,412,962,576,144);
  panel(1008,954,976,160);label(7,'ภาพภายในตู้\nหน้า-หลัง',1018,966,350,82,'#6fdcd0');cover(I.boxF,1380,962,290,144);cover(I.boxB,1680,962,292,144);
@@ -384,7 +405,7 @@ async function exportSheet(r){toast('กำลังสร้างรูปส�
  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return}catch(e){if(e.name==='AbortError')return}}
  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('บันทึกรูปสรุปแล้ว')}
 function carText(r){const bad=badList(r),cks=checksFor(r.type),ok=cks.filter(([k])=>r.checks[k]&&r.checks[k].v==='ok').length;
- return[`🚚 ผลตรวจสภาพรถ ${r.plate}`,`📍 ${dcName(r.dc)} · ${TYN[r.type]||r.type}`,`🗓️ ${mLabel(r.month)} · ผู้ตรวจ ${r.inspector}`,r.mile?`🛣️ เลขไมล์ ${fmt(r.mile)} กม.`:'',
+ return[`🚚 ผลตรวจสภาพรถ ${r.plate}`,`📍 ${dcName(r.dc)} · ${TYN[r.type]||r.type}`,`🗓️ ${mLabel(r.month)} · ผู้ตรวจ ${r.inspector}`,r.mile?`🛣️ เลขไมล์ ${fmt(r.mile)} กม.`:'',camS(r)?`📹 กล้องหน้ารถ: ${CAML[camS(r)]}`:'',
   r.result==='issue'?`⚠️ พบความผิดปกติ ${bad.length} รายการ`:'✅ ปกติ ไม่พบปัญหา',...bad.map((k,i)=>`  ${i+1}. ${CKL[k]}${r.checks[k].n?' — '+r.checks[k].n:''}`),
   r.issue.v==='has'&&r.issue.t?`📝 ${r.issue.t}`:'',`✔️ ปกติ ${ok}/${cks.length} รายการ`,
   '🛞 ปียาง '+TY.map(([k,l])=>{const a=tyreAge(r.tyres[k]);return`${l} ${r.tyres[k]||'-'}${a!=null&&a>=MAXY?' ⚠️':''}`}).join(' · '),
@@ -409,14 +430,32 @@ function viewSum(){$('#ttl').textContent='สรุปการตรวจ';$('
  if($('#s-xl'))$('#s-xl').onclick=exportXlsx}
 async function exportXlsx(){if(!window.XLSX)return toast('กำลังโหลดตัวสร้าง Excel ลองอีกครั้ง',true);if(S.loadedMonth!==S.month){try{await loadRecs(S.month)}catch(e){}}
  const recs=S.cars.map(c=>[c,S.pend[S.month+'|'+c.pl]||S.recs[c.pl]]);const link=r=>{const id=driveId(r);return id?`https://drive.google.com/file/d/${id}/view`:''};
- const head=['เดือน','ภาค','DC','ทะเบียน','ชนิด','กลุ่ม','ผู้ตรวจ','เลขไมล์','สถานะ','ผล','รายการผิดปกติ','รายละเอียดความผิดปกติ',...TY.map(t=>'ปียาง '+t[1]),'ยางเก่า',...CHECKS.map(c=>c[1]),'บันทึกล่าสุด',...PHOTO.flatMap(p=>p.s.map(s=>'รูป '+s[1])),'รูปจุดผิดปกติ','ใบเคลม'];
+ const head=['เดือน','ภาค','DC','ทะเบียน','ชนิด','กลุ่ม','ผู้ตรวจ','เลขไมล์','สถานะ','ผล','รายการผิดปกติ','รายละเอียดความผิดปกติ',...TY.map(t=>'ปียาง '+t[1]),'ยางเก่า',...CHECKS.map(c=>c[1]),'กล้องหน้ารถ','บันทึกล่าสุด',...PHOTO.flatMap(p=>p.s.map(s=>'รูป '+s[1])),'รูปจุดผิดปกติ','ใบเคลม'];
  const rows=recs.filter(x=>x[1]).map(([c,r])=>[mLabel(r.month),(S.dcs[c.dc]||{}).zone||'',dcName(c.dc),c.pl,TYN[c.ty]||c.ty,GRP[c.g]||c.g,r.inspector,r.mile?+r.mile:'',r.status==='done'?'ครบ':'ยังไม่ครบ',r.result==='issue'?'ผิดปกติ':'ปกติ',
   badList(r).map(k=>CKL[k]+(r.checks[k].n?' ('+r.checks[k].n+')':'')).join(', '),r.issue.v==='has'?r.issue.t:'',...TY.map(([k])=>r.tyres[k]||''),tyreOld(r.tyres)?'ใช่':'',
-  ...CHECKS.map(([k])=>!r.checks[k]||!r.checks[k].v?'':r.checks[k].v==='ok'?'ปกติ':'ผิดปกติ'+(r.checks[k].n?': '+r.checks[k].n:'')),dtLabel(r.updated),...PHOTO.flatMap(p=>p.s.map(([k])=>link(r.photos[k]))),r.photos.damage.map(link).join(' '),r.photos.claim.map(link).join(' ')]);
+  ...CHECKS.map(([k])=>!r.checks[k]||!r.checks[k].v?'':r.checks[k].v==='ok'?'ปกติ':'ผิดปกติ'+(r.checks[k].n?': '+r.checks[k].n:'')),CAML[camS(r)]||'',dtLabel(r.updated),...PHOTO.flatMap(p=>p.s.map(([k])=>link(r.photos[k]))),r.photos.damage.map(link).join(' '),r.photos.claim.map(link).join(' ')]);
  const none=recs.filter(x=>!x[1]).map(([c])=>[(S.dcs[c.dc]||{}).zone||'',dcName(c.dc),c.pl,TYN[c.ty]||c.ty,GRP[c.g]||c.g]);
  const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet([head,...rows]);ws['!cols']=head.map((h,i)=>({wch:i<12?Math.max(10,h.length+2):14}));XLSX.utils.book_append_sheet(wb,ws,'ผลตรวจ');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['ภาค','DC','ทะเบียน','ชนิด','กลุ่ม'],...none]),'ยังไม่ตรวจ');
  XLSX.writeFile(wb,`NIMEX-Car-Inspection-Monthly-${S.month}.xlsx`)}
+
+/* ---------- admin: required / optional + notes for inspectors ---------- */
+function viewSet(){$('#ttl').textContent='ตั้งค่าฟอร์มตรวจ';$('#sub').textContent='เฉพาะผู้ดูแล · มีผลกับผู้ตรวจทุกคน';
+ const c=JSON.parse(JSON.stringify(S.cfg||{}));c.req=c.req||{};c.note=c.note||{};
+ const row=(k,l,d,hint)=>`<div class="srow"><div class="snm">${esc(l)}${hint?`<small>${esc(hint)}</small>`:''}</div><div class="seg2 sreq" data-k="${k}"><button type="button" data-v="1" aria-pressed="${rq0(c,k,d)}">บังคับ</button><button type="button" data-v="0" aria-pressed="${!rq0(c,k,d)}">ไม่บังคับ</button></div><input class="snote" data-n="${k}" placeholder="หมายเหตุถึงผู้ตรวจ (ถ้ามี)" value="${esc(c.note[k]||'')}" aria-label="หมายเหตุ ${esc(l)}"></div>`;
+ const secNote=k=>`<input class="snote sec" data-n="${k}" placeholder="หมายเหตุของหมวดนี้ (แสดงบนสุดของหมวด)" value="${esc(c.note[k]||'')}" aria-label="หมายเหตุหมวด">`;
+ $('#view').innerHTML=`<p class="eyebrow">เฉพาะผู้ดูแล</p><div class="page-h"><h1>บังคับหรือไม่บังคับ และหมายเหตุ</h1><p class="say">รายการที่ "บังคับ" ต้องมีครบก่อนกดส่ง หมายเหตุจะแสดงให้ผู้ตรวจเห็นใต้รายการนั้น</p></div>
+ <div class="card"><h2>ประกาศถึงผู้ตรวจทุกคน</h2><div class="field"><textarea id="s-gen" placeholder="แสดงบนสุดของฟอร์มตรวจ เช่น เดือนนี้เน้นถ่ายม่านความเย็นให้เห็นรางด้านบน">${esc(c.general||'')}</textarea></div></div>
+ <div class="card"><h2>ข้อมูลรถ</h2>${row('mile','เลขไมล์',0)}</div>
+ ${PHOTO.map(s=>`<div class="card"><h2>${esc(s.t)}${s.only?' <small>(เฉพาะรถ 042)</small>':''}</h2>${secNote('sec:'+s.k)}${s.s.map(([k,l])=>row(k,'รูป'+l,1)).join('')}${s.k==='dot'?row('tyres','ใส่เลขปียาง 4 เส้น',1):''}</div>`).join('')}
+ <div class="card"><h2>รายการตรวจ ปกติ / ผิดปกติ</h2>${secNote('sec:check')}${CHECKS.map(([k,l,h])=>row('ck:'+k,l,1,h)).join('')}</div>
+ <div class="card"><h2>กล้องหน้ารถ</h2>${row('cam','เลือกสถานะกล้อง (มี / ไม่มี / กล้องเสีย / การ์ดเสีย)',1,'ถ้าเลือก "ไม่มีกล้อง" ไม่ต้องถ่ายรูป')}</div>
+ <div class="card"><h2>สรุปความผิดปกติ</h2>${row('issue','เลือก "ปกติ" หรือ "พบความผิดปกติ"',1)}</div>`;
+ $$('.sreq button').forEach(b=>b.onclick=()=>{const p=b.parentElement;c.req[p.dataset.k]=+b.dataset.v;p.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b))});
+ $$('.snote').forEach(i=>i.oninput=()=>{const v=i.value.trim();if(v)c.note[i.dataset.n]=v;else delete c.note[i.dataset.n]});
+ $('#s-gen').oninput=e=>{c.general=e.target.value.trim()};
+ const ab=$('#actbar');ab.hidden=false;ab.innerHTML=`<button type="button" class="btn gold" id="s-save">${IC.check}บันทึกการตั้งค่า</button>`;
+ $('#s-save').onclick=async()=>{const b=$('#s-save');b.disabled=true;try{const j=await api({a:'set',k:'form',v:c});S.cfg=j.v;if(S.pub){S.pub.cfg={form:j.v};IDB.put('cache','pub',S.pub)}toast('บันทึกแล้ว ผู้ตรวจจะเห็นเมื่อเปิดแอปครั้งถัดไป')}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,true)}b.disabled=false}}
 
 /* ---------- account / sync sheets ---------- */
 function meSheet(){if(!isStaff()){const sh=sheet(`<h2>เข้าสู่ระบบ</h2><p class="say">ผู้ตรวจรถเข้าสู่ระบบเพื่อบันทึกผลตรวจ</p><button type="button" class="btn" id="me-login">เข้าสู่ระบบผู้ตรวจ</button>`);$('#me-login').onclick=()=>{closeSheet();showLogin()};return}

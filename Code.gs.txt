@@ -7,7 +7,7 @@
  *    PHOTO_FOLDER_ID  (ไม่ต้องใส่) ระบบสร้างโฟลเดอร์รูปใน Google Drive ให้เองตอนอัปโหลดครั้งแรก
  *  รหัสไม่ถูกเก็บในไฟล์นี้ */
 var COLS=['id','month','plate','dc','type','grp','inspector','mile','status','result','checks','tyres','issue','photos','created','updated','by'];
-var TABS={rec:{name:'Inspections',cols:COLS},cars:{name:'Cars',cols:['plate','type','year','dc','grp']},dcs:{name:'DCs',cols:['dc','name','zone']},log:{name:'Log',cols:['time','who','action','detail']}};
+var TABS={set:{name:'Settings',cols:['key','json']},rec:{name:'Inspections',cols:COLS},cars:{name:'Cars',cols:['plate','type','year','dc','grp']},dcs:{name:'DCs',cols:['dc','name','zone']},log:{name:'Log',cols:['time','who','action','detail']}};
 var TZ='Asia/Bangkok';
 function props_(){return PropertiesService.getScriptProperties()}
 function ss_(){return SpreadsheetApp.getActiveSpreadsheet()}
@@ -37,10 +37,39 @@ function toRow_(o){return COLS.map(function(k){var v=o[k];if(JSONCOLS[k])return 
 function fileIds_(p){var ids=[];for(var k in (p||{})){var v=p[k];(Array.isArray(v)?v:[v]).forEach(function(x){if(x&&typeof x==='string'&&x.indexOf('d:')===0)ids.push(x.slice(2).split('#')[0])})}return ids}
 function oldTyre_(t){var max=+(props_().getProperty('TYRE_MAX_YEARS')||5),n=new Date();for(var k in (t||{})){var s=String(t[k]||'');if(!/^\d{4}$/.test(s))continue;var wk=+s.slice(0,2),yr=2000+(+s.slice(2));var d=new Date(yr,0,1+(wk-1)*7);if((n-d)/31557600000>=max)return 1}return 0}
 
-function publicData_(){var cs=cars_(false),st=read_('rec').map(function(r){var o=toObj_(r);var bad=0;for(var k in o.checks){if(o.checks[k]&&o.checks[k].v==='bad')bad++}return[o.month,o.plate,o.status,o.result,oldTyre_(o.tyres),bad]});
- return{cars:cs.cars,dcs:cs.dcs,st:st,now:now_()}}
+/* ---------- การตั้งค่า (แท็บ Settings): form = บังคับ/หมายเหตุของฟอร์มตรวจ, cat = การแสดงผลใน Fleet Catalog, carx = ปีรถ/ราคา/รูปแทนรายคัน ---------- */
+function getSet_(k,def){var rows=read_('set');for(var i=0;i<rows.length;i++)if(rows[i][0]===k)return parse_(rows[i][1],def);return def}
+function putSet_(k,v){var t=tab_('set'),rows=read_('set'),idx=-1;for(var i=0;i<rows.length;i++)if(rows[i][0]===k){idx=i;break}
+ var rg=t.getRange(idx>=0?idx+2:t.getLastRow()+1,1,1,2);rg.setNumberFormat('@');rg.setValues([[k,JSON.stringify(v||{})]])}
 
-function doGet(){return json_(publicData_())}
+function publicData_(){var cs=cars_(false),st=read_('rec').map(function(r){var o=toObj_(r);var bad=0;for(var k in o.checks){if(o.checks[k]&&o.checks[k].v==='bad')bad++}return[o.month,o.plate,o.status,o.result,oldTyre_(o.tyres),bad]});
+ return{cars:cs.cars,dcs:cs.dcs,st:st,cfg:{form:getSet_('form',{})},now:now_()}}
+
+function doGet(e){var a=e&&e.parameter&&e.parameter.a;
+ if(a==='cat')return json_(catPublic_());
+ if(a==='img'){var id=String(e.parameter.id||''),pub=catPublic_(),ok=false;pub.cars.forEach(function(c){for(var k in c.ph)if(c.ph[k]===id)ok=true});return json_(ok?img_(id):{ok:false,error:'denied'})}
+ return json_(publicData_())}
+
+/* ---------- Fleet Planning Catalog ---------- */
+var GROUPS={p4:['front','back','left','right'],eng:['engine','battery','odo'],tyre:['tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare'],cab:['cabin','boxF','boxB','curtain','dashcam'],dmg:['damage']};
+var CAT_DEF={p4:1,eng:0,tyre:0,cab:0,dmg:0,year:0,price:0};
+function latest_(){var m={};read_('rec').forEach(function(r){var o=toObj_(r),p=m[o.plate];if(!p||o.month>p.month||(o.month===p.month&&o.status==='done'))m[o.plate]=o});return m}
+function fid_(x){return x&&typeof x==='string'&&x.indexOf('d:')===0?x.slice(2).split('#')[0]:null}
+function carPhotos_(rec,x){var ph={};if(rec){for(var g in GROUPS)GROUPS[g].forEach(function(k){var v=rec.photos[k];if(Array.isArray(v))v.forEach(function(y,i){var id=fid_(y);if(id)ph[k+(i+1)]=id});else{var id=fid_(v);if(id)ph[k]=id}})}
+ var o=(x&&x.ph)||{};for(var k in o){if(o[k]==='-')delete ph[k];else if(o[k])ph[k]=o[k]}return ph}
+function grpOf_(k){for(var g in GROUPS)for(var i=0;i<GROUPS[g].length;i++)if(k.indexOf(GROUPS[g][i])===0)return g;return null}
+function catPublic_(){var c=CacheService.getScriptCache(),hit=c.get('cat-v1');if(hit)return JSON.parse(hit);
+ var cs=cars_(false),L=latest_(),set=getSet_('cat',{}),glob=set.glob||{},per=set.per||{},carx=getSet_('carx',{});
+ var vis=function(pl,k){var p=per[pl]||{};if(k in p)return !!p[k];return k in glob?!!glob[k]:!!CAT_DEF[k]};
+ var out={cars:cs.cars.map(function(r){var pl=r[0],x=carx[pl]||{},all=carPhotos_(L[pl],x),ph={};
+   for(var k in all){var g=grpOf_(k);if(g&&vis(pl,g))ph[k]=all[k]}
+   return{pl:pl,ty:r[1],dc:r[3],g:r[4],yr:vis(pl,'year')?(x.yr||r[2]):'',pr:vis(pl,'price')?(x.pr||''):'',ph:ph}}),dcs:cs.dcs};
+ try{c.put('cat-v1',JSON.stringify(out),300)}catch(e){}return out}
+function catAdmin_(){var cs=cars_(false),L=latest_(),carx=getSet_('carx',{});
+ return{ok:true,dcs:cs.dcs,set:getSet_('cat',{}),def:CAT_DEF,carx:carx,cars:cs.cars.map(function(r){var pl=r[0],x=carx[pl]||{},rec=L[pl];
+  return{pl:pl,ty:r[1],dc:r[3],g:r[4],yr0:r[2],yr:x.yr||r[2],pr:x.pr||'',ph:carPhotos_(rec,x),
+   ins:rec?{m:rec.month,st:rec.status,res:rec.result,by:rec.inspector,mile:rec.mile,upd:rec.updated,checks:rec.checks,tyres:rec.tyres,issue:rec.issue}:null}})}}
+function catClear_(){CacheService.getScriptCache().remove('cat-v1')}
 
 /* ---------- รูปภาพใน Google Drive ---------- */
 function root_(){var p=props_(),id=p.getProperty('PHOTO_FOLDER_ID');if(id){try{return DriveApp.getFolderById(id)}catch(e){}}
@@ -50,7 +79,7 @@ function folderFor_(month,dc,plate){var key='fd-'+month+'-'+dc+'-'+plate,c=Cache
  var lock=LockService.getScriptLock();lock.waitLock(20000);try{var dcs={};cars_(false).dcs.forEach(function(d){dcs[d[0]]=d[1]});
   var f=sub_(sub_(sub_(root_(),month),dc+' '+(dcs[dc]||'')),plate);c.put(key,f.getId(),21600);return f}finally{lock.releaseLock()}}
 
-function savePhoto_(b,who){if(!/^\d{4}-\d{2}$/.test(b.month)||!b.plate||!b.data)return{ok:false,error:'bad_request'};
+function savePhoto_(b,who){if(!/^(\d{4}-\d{2}|catalog)$/.test(b.month)||!b.plate||!b.data)return{ok:false,error:'bad_request'};
  var mime=b.mime==='application/pdf'?'application/pdf':'image/jpeg',bytes=Utilities.base64Decode(b.data);if(bytes.length>15*1024*1024)return{ok:false,error:'too_big'};
  var name=b.plate+'_'+String(b.slot||'x').replace(/[^\w-]/g,'')+'_'+Utilities.formatDate(new Date(),TZ,'yyyyMMdd-HHmmss')+(mime==='application/pdf'?'.pdf':'.jpg');
  var file=folderFor_(b.month,String(b.dc||''),String(b.plate)).createFile(Utilities.newBlob(bytes,mime,name));
@@ -73,6 +102,10 @@ function doPost(e){var b;try{b=JSON.parse(e.postData.contents)}catch(x){return j
  if(b.a==='list'){var rows=read_('rec').filter(function(r){return !b.month||r[1]===b.month}).map(toObj_);return json_({ok:true,rows:rows})}
  if(b.a==='photo')return json_(savePhoto_(b,who));
  if(b.a==='img')return json_(img_(String(b.id||'')));
+ if(b.a==='catadmin'){if(role!=='admin')return json_({ok:false,error:'denied'});return json_(catAdmin_())}
+ if(b.a==='set'){if(role!=='admin'||['form','cat','carx'].indexOf(b.k)<0)return json_({ok:false,error:'denied'});
+  var lk=LockService.getScriptLock();lk.waitLock(20000);try{var v=b.v;if(b.k==='carx'&&b.merge){var cur=getSet_('carx',{});for(var p in b.v){cur[p]=cur[p]||{};for(var q in b.v[p]){if(b.v[p][q]===null)delete cur[p][q];else cur[p][q]=b.v[p][q]}}v=cur}
+   putSet_(b.k,v);catClear_();log_(who,'set',b.k);return json_({ok:true,v:v})}finally{lk.releaseLock()}}
  if(b.a==='cars'){if(role!=='admin')return json_({ok:false,error:'denied'});var cs=cars_(true);log_(who,'cars',cs.cars.length+' cars from '+cs.from);return json_({ok:true,cars:cs.cars,dcs:cs.dcs,from:cs.from})}
  var lock=LockService.getScriptLock();if(!lock.tryLock(25000))return json_({ok:false,error:'busy'});
  try{
@@ -84,9 +117,9 @@ function doPost(e){var b;try{b=JSON.parse(e.postData.contents)}catch(x){return j
    r.created=old?old.created:now_();r.updated=now_();r.by=who;
    if(old){var keep={};fileIds_(r.photos).forEach(function(x){keep[x]=1});fileIds_(old.photos).forEach(function(x){if(!keep[x]){try{DriveApp.getFileById(x).setTrashed(true)}catch(err){}}})}
    var row=toRow_(r),rg=t.getRange(idx>=0?idx+2:t.getLastRow()+1,1,1,COLS.length);rg.setNumberFormat('@');rg.setValues([row]);
-   log_(who,'save',r.id+' '+r.status+' '+r.result);return json_({ok:true,rec:toObj_(row)})}
+   catClear_();log_(who,'save',r.id+' '+r.status+' '+r.result);return json_({ok:true,rec:toObj_(row)})}
   if(b.a==='del'){if(role!=='admin')return json_({ok:false,error:'denied'});
-   for(var j=0;j<all.length;j++)if(all[j][0]===b.id){fileIds_(toObj_(all[j]).photos).forEach(function(x){try{DriveApp.getFileById(x).setTrashed(true)}catch(err){}});t.deleteRow(j+2);log_(who,'del',b.id);return json_({ok:true})}
+   for(var j=0;j<all.length;j++)if(all[j][0]===b.id){fileIds_(toObj_(all[j]).photos).forEach(function(x){try{DriveApp.getFileById(x).setTrashed(true)}catch(err){}});t.deleteRow(j+2);catClear_();log_(who,'del',b.id);return json_({ok:true})}
    return json_({ok:false,error:'not_found'})}
   return json_({ok:false,error:'unknown'})
  }finally{lock.releaseLock()}}
