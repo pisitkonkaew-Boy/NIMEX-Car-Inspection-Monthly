@@ -105,6 +105,8 @@ function cats_(o){var cam=o.checks&&o.checks.dashcam&&(o.checks.dashcam.s==='bro
  var body=BODY_CK.some(function(k){return bad_(o,k)})||((o.photos||{}).damage||[]).length>0;
  var box=BOX_CK.some(function(k){return bad_(o,k)});var tyre=!!oldTyre_(o.tyres);
  return{cam:!!cam,tyre:tyre,body:!!body,box:!!box,any:o.result==='issue'||cam||tyre||body||box}}
+/* ผลสุดท้าย: ถ้าแอดมินยืนยันแล้ว ใช้ผลของแอดมิน (อนุโลมบางหมวดได้) ไม่งั้นใช้ผลจากที่ผู้ตรวจกรอก */
+function catsEff_(o,ap){var a=ap&&ap[o.id];if(a&&a.v)return{cam:!!a.v.cam,tyre:!!a.v.tyre,body:!!a.v.body,box:!!a.v.box,any:!!a.v.any,adm:1};return cats_(o)}
 var TYAB={'040':'AB','042':'CC'};
 var CKN={headlight:'ไฟหน้า',taillight:'ไฟท้าย / ไฟเบรก',signal:'ไฟเลี้ยว / ไฟฉุกเฉิน',brake:'เบรก',handbrake:'เบรกมือ',ac:'แอร์ห้องโดยสาร',horn:'แตร',wiper:'ที่ปัดน้ำฝน',mirror:'กระจก / กระจกมองข้าง',belt:'เข็มขัดนิรภัย',fluid:'น้ำมันเครื่อง / น้ำหล่อเย็น',dash:'ไฟเตือนหน้าปัด',door:'ประตูตู้ / ซีลยาง / กุญแจ',reefer:'ตู้เย็น',curtainF:'ม่านความเย็น ด้านหน้า',curtainB:'ม่านความเย็น ด้านหลัง',dashcam:'กล้องหน้ารถ'};
 var PHN={front:'ด้านหน้า',back:'ด้านหลัง',right:'ด้านข้างขวา',left:'ด้านข้างซ้าย',engine:'ห้องเครื่อง',battery:'แบตเตอรี่',odo:'หน้าปัดเลขไมล์',tFL:'ยางหน้าซ้าย',tFR:'ยางหน้าขวา',tRL:'ยางหลังซ้าย',tRR:'ยางหลังขวา',dFL:'ปียาง หน้าซ้าย',dFR:'ปียาง หน้าขวา',dRL:'ปียาง หลังซ้าย',dRR:'ปียาง หลังขวา',spare:'ยางอะไหล่',cabin:'ห้องโดยสาร',boxF:'ภายในตู้ ด้านหน้า',boxB:'ภายในตู้ ด้านหลัง',curtainF:'ม่านความเย็น ด้านหน้า',curtainB:'ม่านความเย็น ด้านหลัง',dashcam:'กล้องหน้ารถ'};
@@ -117,15 +119,15 @@ function reports_(){try{var cs=cars_(false),dcs={},zone={},tyOf={};cs.dcs.forEac
  var tot={AB:0,CC:0};cs.cars.forEach(function(c){var t=TYAB[c[1]];if(t)tot[t]++});
  var S=[['เดือน','หัวข้อ','AB รถแห้ง','CC รถเย็น','รวม']];
  Object.keys(months).sort().reverse().forEach(function(m){var k={done:{AB:0,CC:0},ok:{AB:0,CC:0},bad:{AB:0,CC:0},cam:{AB:0,CC:0},tyre:{AB:0,CC:0},body:{AB:0,CC:0},box:{AB:0,CC:0}};
-  recs.filter(function(o){return o.month===m&&o.status==='done'}).forEach(function(o){var t=tyOf[o.plate]||TYAB[o.type];if(!t)return;var c=cats_(o);k.done[t]++;k[c.any?'bad':'ok'][t]++;['cam','tyre','body','box'].forEach(function(x){if(c[x])k[x][t]++})});
+  recs.filter(function(o){return o.month===m&&o.status==='done'}).forEach(function(o){var t=tyOf[o.plate]||TYAB[o.type];if(!t)return;var c=catsEff_(o,appr);k.done[t]++;k[c.any?'bad':'ok'][t]++;['cam','tyre','body','box'].forEach(function(x){if(c[x])k[x][t]++})});
   [['รถทั้งหมด',tot],['ตรวจครบ',k.done],['ปกติ',k.ok],['ไม่ปกติ',k.bad],['ไม่ปกติ: กล้องหน้ารถ',k.cam],['ไม่ปกติ: ยางรถยนต์ (อายุ 5 ปีขึ้นไป)',k.tyre],['ไม่ปกติ: ภาพรอบคัน',k.body],['ไม่ปกติ: ภายในตู้ หน้า-หลัง',k.box]].forEach(function(r){S.push([m,r[0],r[1].AB,r[1].CC,r[1].AB+r[1].CC])})});
  sheetW_('Summary',S);
  var CKS=Object.keys(CKN).filter(function(k){return k!=='dashcam'}),PHS=Object.keys(PHN);
  var D=[['เดือน','ภาค','DC','ทะเบียน','ชนิด','กลุ่ม','ผู้ตรวจ','เลขไมล์','สถานะ','ผล','กล้องหน้ารถ','ยางอายุ 5 ปีขึ้นไป','รอบคันผิดปกติ','ภายในตู้ผิดปกติ','ตรวจสอบแล้ว (แอดมิน)','ปียาง หน้าซ้าย','ปียาง หน้าขวา','ปียาง หลังซ้าย','ปียาง หลังขวา'].concat(CKS.map(function(k){return CKN[k]}),['สรุปความผิดปกติ','บันทึกล่าสุด','บันทึกโดย'],PHS.map(function(k){return'รูป '+PHN[k]}),['รูปจุดที่ผิดปกติ','ใบเคลม / ประวัติรถ'])];
  var link=function(x){var id=fid_(x);return id?'https://drive.google.com/file/d/'+id+'/view':''};
- recs.sort(function(a,b){return a.month<b.month?1:a.month>b.month?-1:(+a.dc)-(+b.dc)||(a.plate<b.plate?-1:1)}).forEach(function(o){var c=cats_(o),ty=o.tyres||{},ap=appr[o.id];
+ recs.sort(function(a,b){return a.month<b.month?1:a.month>b.month?-1:(+a.dc)-(+b.dc)||(a.plate<b.plate?-1:1)}).forEach(function(o){var c=catsEff_(o,appr),ty=o.tyres||{},ap=appr[o.id];
   D.push([o.month,zone[o.dc]||'',dcs[o.dc]||o.dc,o.plate,tyOf[o.plate]||o.type,o.grp==='A'?'รถใช้งาน':o.grp==='S'?'รถ Stock':o.grp,o.inspector,o.mile,o.status==='done'?'ครบ':'ยังไม่ครบ',c.any?'ไม่ปกติ':'ปกติ',
-   (o.checks.dashcam&&o.checks.dashcam.n)||'',c.tyre?'ใช่':'',c.body?'ใช่':'',c.box?'ใช่':'',ap?('ใช่ · '+ap.by+' · '+ap.at):'',ty.FL||'',ty.FR||'',ty.RL||'',ty.RR||''].concat(
+   (o.checks.dashcam&&o.checks.dashcam.n)||'',c.tyre?'ใช่':'',c.body?'ใช่':'',c.box?'ใช่':'',ap?('ใช่ · '+ap.by+' · '+ap.at+(ap.note?' · '+ap.note:'')):'',ty.FL||'',ty.FR||'',ty.RL||'',ty.RR||''].concat(
    CKS.map(function(k){var v=o.checks[k];return !v||!v.v?'':v.v==='ok'?'ปกติ':v.v==='bad'?'ผิดปกติ'+(v.n?': '+v.n:''):''}),
    [o.issue&&o.issue.v==='has'?o.issue.t:o.issue&&o.issue.v==='none'?'ปกติ ไม่พบปัญหา':'',o.updated,o.by],
    PHS.map(function(k){return link(o.photos[k])}),[(o.photos.damage||[]).map(link).join(' '),(o.photos.claim||[]).map(link).join(' ')]))});
@@ -136,7 +138,7 @@ function doPost(e){var b;try{b=JSON.parse(e.postData.contents)}catch(x){return j
  var who=String(b.who||'').slice(0,80)+(b.wdc?' @'+b.wdc:'');
  if(b.a==='auth'){if(b.key&&role!=='admin'){Utilities.sleep(1200);return json_({ok:false,error:'denied'})}return json_({ok:true,role:role})}
  if(b.a==='list'){var rows=read_('rec').filter(function(r){return !b.month||r[1]===b.month}).map(toObj_);return json_({ok:true,rows:rows,appr:role==='admin'?getSet_('appr',{}):{}})}
- if(b.a==='appr'){if(role!=='admin')return json_({ok:false,error:'denied'});var lka=LockService.getScriptLock();lka.waitLock(20000);try{var ap=getSet_('appr',{});(b.ids||[]).forEach(function(id){if(b.on)ap[id]={by:String(b.who||'แอดมิน').slice(0,60),at:now_()};else delete ap[id]});putSet_('appr',ap);catClear_();log_(who,b.on?'approve':'unapprove',(b.ids||[]).join(','));reports_();return json_({ok:true,appr:ap})}finally{lka.releaseLock()}}
+ if(b.a==='appr'){if(role!=='admin')return json_({ok:false,error:'denied'});var lka=LockService.getScriptLock();lka.waitLock(20000);try{var ap=getSet_('appr',{});(b.ids||[]).forEach(function(id){if(b.on){ap[id]={by:String(b.who||'แอดมิน').slice(0,60),at:now_()};if(b.v)ap[id].v={any:!!b.v.any,cam:!!b.v.cam,tyre:!!b.v.tyre,body:!!b.v.body,box:!!b.v.box};if(b.note)ap[id].note=String(b.note).slice(0,300)}else delete ap[id]});putSet_('appr',ap);catClear_();log_(who,b.on?'approve':'unapprove',(b.ids||[]).join(','));reports_();return json_({ok:true,appr:ap})}finally{lka.releaseLock()}}
  if(b.a==='report'){if(role!=='admin')return json_({ok:false,error:'denied'});reports_();return json_({ok:true})}
  if(b.a==='photo')return json_(savePhoto_(b,who));
  if(b.a==='img')return json_(img_(String(b.id||'')));
