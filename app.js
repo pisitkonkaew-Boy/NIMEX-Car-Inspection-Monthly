@@ -226,11 +226,12 @@ function viewCars(){const dc=S.dcSel||(S.sess&&S.sess.dc)||'all';S.dcSel=dc;cons
  const rows=st.filter(([c,s])=>pass(s)&&(!q||c.pl.replace(/\s/g,'').includes(q)||dcName(c.dc).includes(q))).sort((a,b)=>ord[a[1].k]-ord[b[1].k]||(+a[0].dc)-(+b[0].dc)||a[0].pl.localeCompare(b[0].pl,'th'));
  const past=S.month!==monthNow();
  $('#view').innerHTML=`<p class="eyebrow">ตรวจสภาพรถประจำเดือน</p><div class="page-h"><h1>${esc(dc==='all'?'ทุก DC':dcName(dc))}</h1><p class="say">${mLabel(S.month)} · แตะรถที่ต้องการตรวจ${past?' · <b class="badt">ดูข้อมูลเดือนก่อน</b>':''}</p></div>
- ${adm?`<div class="tools"><input type="search" id="q" placeholder="ค้นหาทะเบียน" value="${esc(S.q)}" autocomplete="off" enterkeyhint="search"><select id="dcsel" aria-label="DC">${dcOpts(dc,true)}</select><select id="msel" aria-label="เดือน">${monthOpts()}</select><select id="fsel" aria-label="กรอง">${AFILT.map(([k,t])=>`<option value="${k}"${S.filt===k?' selected':''}>${t} (${st.filter(x=>passF(k,x[1])).length})</option>`).join('')}</select></div>`
+ ${adm?`<div class="tools"><input type="search" id="q" placeholder="ค้นหาทะเบียน" value="${esc(S.q)}" autocomplete="off" enterkeyhint="search"><select id="dcsel" aria-label="DC">${dcOpts(dc,true)}</select><select id="msel" aria-label="เดือน">${monthOpts()}</select><select id="fsel" aria-label="กรอง">${AFILT.map(([k,t])=>`<option value="${k}"${S.filt===k?' selected':''}>${t} (${st.filter(x=>passF(k,x[1])).length})</option>`).join('')}</select><button type="button" class="btn alt" id="pk">${IC.share}รูปสรุป 16:9</button></div>`
  :`<div class="seg2" role="group" aria-label="กรองสถานะ">${[['all','ทั้งหมด',n.all],['none','ยังไม่ตรวจ',n.none],['draft','ยังไม่ครบ',n.draft],['done','ตรวจครบ',n.done]].map(([k,t,c])=>`<button type="button" data-f="${k}" aria-pressed="${S.filt===k}">${t}<b>${c}</b></button>`).join('')}</div>`}
  <div class="list">${rows.length?rows.map(([c,s])=>{const ph=s.r&&s.r.photos.front||s.d&&s.d.photos.front;return`<button type="button" class="item" data-car="${esc(c.pl)}"><span class="thumb" ${ph?bg(ph,200):''}>${ph?'':IC.car}</span><span class="meta"><span class="plate">${esc(c.pl)}</span><span class="sub" style="display:block">${esc(TYN[c.ty]||c.ty)} · ${esc(GRP[c.g]||c.g)}${dc==='all'?' · '+esc(dcName(c.dc)):''}</span><span class="chips">${chipsOf(s)}</span>${s.r&&s.r.updated?`<span class="sub">${esc(s.r.inspector||'')} · ${dtLabel(s.r.updated)}</span>`:''}</span><span class="go">${IC.chev}</span></button>`}).join(''):`<div class="empty">ไม่พบรถในรายการนี้</div>`}</div>`;
  hydrate($('#view'));
  if($('#fsel'))$('#fsel').onchange=e=>{S.filt=e.target.value;viewCars()};
+ if($('#pk'))$('#pk').onclick=()=>pickSheet(rows.map(x=>x[0]));
  const qi=$('#q')||{};qi.oninput=()=>{S.q=qi.value;clearTimeout(qi._t);qi._t=setTimeout(()=>{const p=qi.selectionStart;viewCars();const n2=$('#q');n2.focus();try{n2.setSelectionRange(p,p)}catch(e){}},250)};
  $$('[data-f]').forEach(b=>b.onclick=()=>{S.filt=b.dataset.f;viewCars()});$$('[data-kf]').forEach(b=>b.onclick=()=>{S.filt=b.dataset.kf;viewCars()});
  if($('#dcsel'))$('#dcsel').onchange=e=>{S.dcSel=e.target.value;viewCars()};
@@ -381,48 +382,70 @@ async function imgFor(ref){if(!ref||isPdf(ref))return null;let src=null;
  else{const id=driveId(ref);if(!id)return null;S.IMG=S.IMG||{};if(!S.IMG[id]){const j=await api({a:'img',id});S.IMG[id]=URL.createObjectURL(b64Blob(j.data,j.mime))}src=S.IMG[id]}
  return await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=src})}
 /* 2000x1125 PNG of the sheet, drawn on a canvas (Prompt font, no html2canvas) */
-async function exportSheet(r){toast('กำลังสร้างรูปสรุป…');try{await document.fonts.load('600 40px Prompt');await document.fonts.load('500 20px Prompt')}catch(e){}
+/* 2000x1125 summary image in the NIMEX theme (navy / gold, white cards; red only for problems). Drawn on a canvas with the Prompt font. */
+async function renderSheet(r){try{await document.fonts.load('600 40px Prompt');await document.fonts.load('500 20px Prompt')}catch(e){}
  const W=2000,H=1125,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
- const rr=(X,Y,w,h,rad)=>{x.beginPath();x.roundRect(X,Y,w,h,rad)};const F=(w,s)=>`${w} ${s}px Prompt, sans-serif`;
- const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#cfe0f7');g.addColorStop(1,'#eef4fc');x.fillStyle=g;x.fillRect(0,0,W,H);
- const keys=['front','back','right','left','engine','battery','odo','tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare','cabin','boxF','boxB','curtain','curtainF','curtainB','dashcam'];
+ const NAVY='#0a2a5e',NAVY2='#123f8c',GOLD='#d4af37',INK='#0b1f3f',MUTED='#55657f',LINE='#dbe3f0',BAD='#b8334a',GOOD='#1d57b8';
+ const F=(w,s)=>`${w} ${s}px Prompt, sans-serif`,rr=(X,Y,w,h,rad)=>{x.beginPath();x.roundRect(X,Y,w,h,rad)};
+ const keys=['front','back','right','left','engine','battery','odo','tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare','cabin','boxF','boxB','curtainF','curtainB','curtain','dashcam'];
  const I={};let fail=0;await Promise.all(keys.map(async k=>{try{I[k]=await imgFor(r.photos[k])}catch(e){fail++}}));
  const logo=await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src='logo.png'});
- const cover=(img,X,Y,w,h,rad=10)=>{x.save();rr(X,Y,w,h,rad);x.clip();if(img){const s=Math.max(w/img.width,h/img.height),iw=img.width*s,ih=img.height*s;x.drawImage(img,X+(w-iw)/2,Y+(h-ih)/2,iw,ih)}else{x.fillStyle='#d9e2ef';x.fillRect(X,Y,w,h);x.fillStyle='#7a8aa5';x.font=F(500,20);x.textAlign='center';x.textBaseline='middle';x.fillText('ไม่มีรูป',X+w/2,Y+h/2)}x.restore()};
- const panel=(X,Y,w,h)=>{x.fillStyle='rgba(255,255,255,.92)';rr(X,Y,w,h,18);x.fill()};
- const cap=(t,X,Y,w,dark)=>{x.font=F(600,24);const tw=Math.min(w-20,x.measureText(t).width+60);x.fillStyle=dark?'#0a2a5e':'#f2f4f8';rr(X+(w-tw)/2,Y,tw,36,18);x.fill();x.fillStyle=dark?'#fff':'#0a2a5e';x.textAlign='center';x.textBaseline='middle';x.fillText(t,X+w/2,Y+19,w-30)};
- const label=(n,t,X,Y,w,h,col)=>{x.fillStyle=col;rr(X,Y,w,h,h/2);x.fill();x.fillStyle='#0a2a5e';x.beginPath();x.arc(X+h/2+4,Y+h/2,h/2-4,0,7);x.fill();x.fillStyle='#fff';x.font=F(600,h*0.55);x.textAlign='center';x.textBaseline='middle';x.fillText(String(n),X+h/2+4,Y+h/2+2);x.fillStyle='#0a2a5e';x.textAlign='left';x.font=F(600,Math.min(34,h*0.5));const lines=t.split('\n');lines.forEach((ln,i)=>x.fillText(ln,X+h+18,Y+h/2+2+(i-(lines.length-1)/2)*h*0.42,w-h-30))};
- /* header */
- x.fillStyle='#fff';rr(24,12,370,144,22);x.fill();if(logo){const s=Math.min(330/logo.width,120/logo.height);x.drawImage(logo,24+(370-logo.width*s)/2,12+(144-logo.height*s)/2,logo.width*s,logo.height*s)}
- x.fillStyle='#0a2a5e';rr(400,14,1000,96,48);x.fill();x.font=F(600,66);x.textBaseline='middle';x.textAlign='left';x.fillStyle='#fff';x.fillText('สำรวจรถบริษัท',440,64);const tw=x.measureText('สำรวจรถบริษัท').width;x.fillStyle='#f4c430';x.fillText('ทั่วประเทศ',440+tw,64);
- x.fillStyle='#f6c945';rr(420,112,980,50,25);x.fill();x.fillStyle='#0a2a5e';x.font=F(600,30);const info=[`DC : ${dcName(r.dc).replace(/^C?DC\s*/,'')}`,`ประเภท : ${TYN[r.type]||r.type}`,`ทะเบียน : ${r.plate}`];info.forEach((t,i)=>{x.textAlign='center';x.fillText(t,420+980/6*(2*i+1),139,310)});
- x.strokeStyle='rgba(10,42,94,.5)';x.lineWidth=2;[1,2].forEach(i=>{x.beginPath();x.moveTo(420+980/3*i,120);x.lineTo(420+980/3*i,154);x.stroke()});
- cover(I.front,1420,12,560,188,16);x.fillStyle='rgba(6,26,61,.75)';rr(1420,160,560,40,0);x.fill();x.fillStyle='#fff';x.font=F(500,20);x.textAlign='center';x.fillText(`ตรวจ ${dtLabel(r.updated).replace(/\s\d+:\d+$/,'')} · ${r.inspector}${r.mile?' · '+fmt(r.mile)+' กม.':''}`,1700,181,540);
- /* 1 four sides */
- panel(16,172,1968,326);label(1,'ภาพรถ เต็มคัน 4 ด้าน',30,206,480,58,'#f4c430');
- [['front','ด้านหน้า'],['back','ด้านหลัง'],['right','ด้านข้างขวา'],['left','ด้านข้างซ้าย']].forEach(([k,l],i)=>{const X=530+i*362,w=350;cover(I[k],X,206,w,248);cap(l,X,436,w,true)});
- x.globalAlpha=1;
- /* 2 engine */
- panel(16,506,572,220);label(2,'ห้องเครื่อง / แบต / ไมล์',30,514,544,52,'#f28b7d');cover(I.engine,32,574,300,142);cover(I.battery,340,574,116,142);cover(I.odo,462,574,116,142);
- /* 3 tyres */
- panel(596,506,1388,220);label(3,'ยางถ่ายเต็มวง 4 เส้น',610,514,470,52,'#a8d86e');
- [['tFL','หน้าซ้าย'],['tFR','หน้าขวา'],['tRL','หลังซ้าย'],['tRR','หลังขวา']].forEach(([k,l],i)=>{const X=612+i*342,w=330;cover(I[k],X,572,w,112);cap(l,X,684,w)});
- /* 4 dot */
- panel(16,734,1968,112);label(4,'ถ่ายเห็นปียาง',30,754,560,62,'#f7b23b');
- TY.forEach(([k],i)=>{const X=612+i*342,w=330,a=tyreAge(r.tyres[k]),old=a!=null&&a>=MAXY;cover(I['d'+k],X,742,w,62,8);cap((r.tyres[k]||'-')+(old?' · ยางเก่า':''),X,806,w);if(old){x.strokeStyle='#b8334a';x.lineWidth=4;rr(X,742,w,62,8);x.stroke()}});
- /* 5 spare + curtain */
- panel(16,854,1968,92);label(5,'ยางอะไหล่',30,866,560,62,'#c58af0');cover(I.spare,612,860,360,80,8);
- const cc=r.type==='042'||r.photos.curtain||r.photos.curtainF,cs=camS(r),camBad=cs==='broken'||cs==='card';
- label(cc?9:8,'กล้องหน้า · '+(CAML[cs]||'-'),990,866,cc?470:560,62,camBad?'#f28b7d':'#ffb38a');if(cs!=='none')cover(I.dashcam,cc?1470:1560,860,cc?150:410,80,8);
- if(cc){label(8,'ม่าน',1630,866,124,62,'#9fb8ff');[['curtainF',1762],['curtainB',1870]].forEach(([k,X])=>{cover(I[k]||I.curtain,X,860,100,80,8);if(r.checks[k]&&r.checks[k].v==='bad'){x.strokeStyle='#b8334a';x.lineWidth=4;rr(X,860,100,80,8);x.stroke()}})}
- /* 6 cabin, 7 box */
- panel(16,954,984,160);label(6,'ห้องโดยสาร',30,970,370,58,'#8cc8f5');cover(I.cabin,412,962,576,144);
- panel(1008,954,976,160);label(7,'ภาพภายในตู้\nหน้า-หลัง',1018,966,350,82,'#6fdcd0');cover(I.boxF,1380,962,290,144);cover(I.boxB,1680,962,292,144);
- const blob=await new Promise(res=>c.toBlob(res,'image/png'));const name=`NIMEX-Inspection-${r.plate}-${r.month}.png`;
+ const text=(t,X,Y,font,col,al='left',max)=>{x.font=font;x.fillStyle=col;x.textAlign=al;x.textBaseline='middle';x.fillText(t,X,Y,max)};
+ const cover=(img,X,Y,w,h,bad)=>{x.save();rr(X,Y,w,h,12);x.clip();if(img){const s=Math.max(w/img.width,h/img.height),iw=img.width*s,ih=img.height*s;x.drawImage(img,X+(w-iw)/2,Y+(h-ih)/2,iw,ih)}else{x.fillStyle='#e9eef7';x.fillRect(X,Y,w,h);text('ไม่มีรูป',X+w/2,Y+h/2,F(500,20),'#7a8aa5','center')}x.restore();
+  if(bad){x.strokeStyle=BAD;x.lineWidth=5;rr(X+2,Y+2,w-4,h-4,11);x.stroke()}};
+ const chip=(t,X,Y,bad,center)=>{x.font=F(500,20);const tw=x.measureText(t).width+28,cx=center?X-tw/2:X;x.fillStyle=bad?BAD:'rgba(10,42,94,.86)';rr(cx,Y,tw,32,16);x.fill();text(t,cx+14,Y+17,F(500,20),'#fff')};
+ const photo=(k,label,X,Y,w,h,bad)=>{cover(I[k],X,Y,w,h,bad);if(label)chip(label,X+10,Y+h-42,bad)};
+ const card=(X,Y,w,h)=>{x.fillStyle='#fff';rr(X,Y,w,h,18);x.fill();x.strokeStyle=LINE;x.lineWidth=2;rr(X,Y,w,h,18);x.stroke();x.fillStyle=GOLD;x.fillRect(X+w*0.25,Y,w*0.5,3)};
+ const sec=(n,t,X,Y)=>{x.fillStyle=NAVY;x.beginPath();x.arc(X+20,Y+20,20,0,7);x.fill();text(String(n),X+20,Y+21,F(600,22),'#fff','center');text(t,X+52,Y+21,F(600,26),INK)};
+ const ck=k=>r.checks[k]&&r.checks[k].v==='bad',cs=camS(r),cats=catsOf(r);
+ /* background + header */
+ x.fillStyle='#eef2f9';x.fillRect(0,0,W,H);x.fillStyle=NAVY;x.fillRect(0,0,W,140);x.fillStyle=GOLD;x.fillRect(0,140,W,5);
+ x.fillStyle='#fff';rr(24,18,230,104,16);x.fill();if(logo){const s=Math.min(206/logo.width,88/logo.height);x.drawImage(logo,24+(230-logo.width*s)/2,18+(104-logo.height*s)/2,logo.width*s,logo.height*s)}
+ x.font=F(600,46);const t1='สำรวจรถบริษัท';text(t1,280,52,F(600,46),'#fff');text('ทั่วประเทศ',280+x.measureText(t1).width+6,52,F(600,46),GOLD);
+ const pills=[[r.plate,1],[dcName(r.dc).replace(/^C?DC\s*/,'DC '),0],[TYN[r.type]||r.type,0],['ตรวจ '+dtLabel(r.updated).replace(/\s\d+:\d+$/,''),0],[r.inspector||'',0]].concat(r.mile?[[fmt(r.mile)+' กม.',0]]:[]);
+ let px=280;pills.forEach(([t,hi])=>{if(!t)return;x.font=F(hi?600:500,hi?24:21);const tw=x.measureText(t).width+30;x.fillStyle=hi?GOLD:'rgba(255,255,255,.14)';rr(px,90,tw,38,19);x.fill();text(t,px+15,110,F(hi?600:500,hi?24:21),hi?NAVY:'#fff');px+=tw+10});
+ x.fillStyle=cats.any?BAD:GOOD;rr(1740,26,236,90,18);x.fill();text('ผลตรวจ',1858,50,F(500,20),'#e6eefb','center');text(cats.any?'ไม่ปกติ':'ปกติ',1858,88,F(600,38),'#fff','center');
+ /* 1 four sides (+ dash cam on the left when the car has one) */
+ card(16,160,1968,320);sec(1,'ภาพรถเต็มคัน 4 ด้าน',36,176);
+ const hasCam=cs&&cs!=='none'&&r.photos.dashcam;let x0=36;
+ if(hasCam){const bad=cs==='broken'||cs==='card';text('กล้องหน้ารถ',36,240,F(500,20),MUTED);photo('dashcam',CAML[cs],36,258,330,204,bad);x0=388}
+ const gw=(1964-x0-3*14)/4;[['front','ด้านหน้า'],['back','ด้านหลัง'],['right','ด้านข้างขวา'],['left','ด้านข้างซ้าย']].forEach(([k,l],i)=>photo(k,l,x0+i*(gw+14),226,gw,236));
+ /* 2 engine / battery / odometer   3 tyres */
+ card(16,496,800,224);sec(2,'ห้องเครื่อง / แบตเตอรี่ / เลขไมล์',36,512);
+ photo('engine','ห้องเครื่อง',36,562,330,142);photo('battery','แบตเตอรี่',380,562,206,142);photo('odo',r.mile?fmt(r.mile)+' กม.':'เลขไมล์',600,562,196,142);
+ card(832,496,1152,224);sec(3,'ยางถ่ายเต็มวง 4 เส้น',852,512);
+ const tw4=(1964-852-3*12)/4;[['tFL','หน้าซ้าย'],['tFR','หน้าขวา'],['tRL','หลังซ้าย'],['tRR','หลังขวา']].forEach(([k,l],i)=>photo(k,l,852+i*(tw4+12),562,tw4,142));
+ /* 4 tyre year */
+ card(16,736,1968,150);sec(4,'ปียาง',36,752);text('สัปดาห์+ปี (WWYY)',88,808,F(400,18),MUTED);
+ const dw=(1964-380-3*14)/4;TY.forEach(([k,l],i)=>{const X=380+i*(dw+14),a=tyreAge(r.tyres[k]),old=a!=null&&a>=MAXY;cover(I['d'+k],X,750,dw,86,old);
+  const lab=`${l} ${r.tyres[k]||'-'}${a!=null?' · '+Math.floor(a)+' ปี':''}${old?' · ยางเก่า':''}`;chip(lab,X+dw/2,842,old,true)});
+ /* 5 spare  6 cabin  7 box  8 curtain (042) */
+ const cc=r.type==='042'||r.photos.curtainF||r.photos.curtain;const Y=902,h=208;
+ const cols=cc?[[16,380],[408,460],[880,548],[1440,544]]:[[16,520],[548,640],[1200,784]];
+ card(cols[0][0],Y,cols[0][1],h);sec(5,'ยางอะไหล่',cols[0][0]+20,Y+16);photo('spare','',cols[0][0]+20,Y+64,cols[0][1]-40,h-82);
+ card(cols[1][0],Y,cols[1][1],h);sec(6,'ห้องโดยสาร',cols[1][0]+20,Y+16);photo('cabin','',cols[1][0]+20,Y+64,cols[1][1]-40,h-82);
+ card(cols[2][0],Y,cols[2][1],h);sec(7,'ภายในตู้ หน้า-หลัง',cols[2][0]+20,Y+16);{const bw=(cols[2][1]-52)/2;photo('boxF','หน้า',cols[2][0]+20,Y+64,bw,h-82);photo('boxB','หลัง',cols[2][0]+32+bw,Y+64,bw,h-82)}
+ if(cc){card(cols[3][0],Y,cols[3][1],h);sec(8,'ม่านความเย็น',cols[3][0]+20,Y+16);const bw=(cols[3][1]-52)/2;
+  [['curtainF','หน้า'],['curtainB','หลัง']].forEach(([k,l],i)=>{const st=r.checks[k]&&r.checks[k].v;photo(r.photos[k]?k:'curtain',l+(st?(st==='bad'?' · ไม่ปกติ':' · ปกติ'):''),cols[3][0]+20+i*(bw+12),Y+64,bw,h-82,ck(k))})}
  if(fail)toast('บางรูปโหลดไม่ได้ ลองใหม่เมื่อมีสัญญาณ',true);
- const file=new File([blob],name,{type:'image/png'});
- if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return}catch(e){if(e.name==='AbortError')return}}
- const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('บันทึกรูปสรุปแล้ว')}
+ return await new Promise(res=>c.toBlob(res,'image/png'))}
+async function saveBlob(blob,name){const file=new File([blob],name,{type:blob.type});
+ if(navigator.canShare&&navigator.canShare({files:[file]})&&/Mobi|Android/i.test(navigator.userAgent)){try{await navigator.share({files:[file],title:name});return}catch(e){if(e.name==='AbortError')return}}
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('บันทึก '+name+' แล้ว')}
+async function exportSheet(r){toast('กำลังสร้างรูปสรุป…');await saveBlob(await renderSheet(r),`NIMEX-Inspection-${r.plate}-${r.month}.png`)}
+/* admin: tick cars and export many summary images in one ZIP */
+async function exportMany(list){if(!window.JSZip)await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s)});
+ const zip=new JSZip();for(let i=0;i<list.length;i++){toast(`กำลังสร้างรูปสรุป ${i+1}/${list.length}…`);zip.file(`NIMEX-Inspection-${list[i].plate}-${list[i].month}.png`,await renderSheet(list[i]))}
+ await saveBlob(await zip.generateAsync({type:'blob'}),`NIMEX-Inspection-${S.month}-${list.length}คัน.zip`)}
+function pickSheet(cars){const done=cars.map(c=>[c,stateOf(c.pl)]).filter(([,s])=>s.k==='done');if(!done.length)return toast('ยังไม่มีรถที่ตรวจครบในรายการนี้',true);
+ const sh=sheet(`<h2>ส่งออกรูปสรุป 16:9</h2><p class="say">ติ๊กเลือกรถที่ต้องการ ได้ไฟล์ PNG คันละ 1 รูป รวมใน ZIP เดียว</p>
+  <div class="btns"><button type="button" class="btn alt" id="pk-all">เลือกทั้งหมด</button><button type="button" class="btn alt" id="pk-none">ไม่เลือกเลย</button></div>
+  <div class="pklist">${done.map(([c,s])=>`<label class="pkrow"><input type="checkbox" value="${esc(c.pl)}" checked><span><b>${esc(c.pl)}</b> · ${esc(dcName(c.dc))} · ${esc(ABCC(c.ty))}${s.c.any?' · <span class="badt">ไม่ปกติ</span>':''}</span></label>`).join('')}</div>
+  <button type="button" class="btn gold" id="pk-go">${IC.share}ส่งออก <span id="pk-n">${done.length}</span> คัน</button>`);
+ const boxes=[...sh.querySelectorAll('.pkrow input')],upd=()=>{sh.querySelector('#pk-n').textContent=boxes.filter(b=>b.checked).length};boxes.forEach(b=>b.onchange=upd);
+ sh.querySelector('#pk-all').onclick=()=>{boxes.forEach(b=>b.checked=true);upd()};sh.querySelector('#pk-none').onclick=()=>{boxes.forEach(b=>b.checked=false);upd()};
+ sh.querySelector('#pk-go').onclick=async()=>{const pl=boxes.filter(b=>b.checked).map(b=>b.value);if(!pl.length)return toast('เลือกรถอย่างน้อย 1 คัน',true);closeSheet();
+  const list=pl.map(p=>S.pend[S.month+'|'+p]||S.recs[p]).filter(Boolean);try{if(list.length===1)await exportSheet(list[0]);else await exportMany(list)}catch(e){toast('ส่งออกไม่สำเร็จ: '+e.message,true)}}}
 function carText(r){const bad=badList(r),cks=checksFor(r.type),ok=cks.filter(([k])=>r.checks[k]&&r.checks[k].v==='ok').length;
  return[`🚚 ผลตรวจสภาพรถ ${r.plate}`,`📍 ${dcName(r.dc)} · ${TYN[r.type]||r.type}`,`🗓️ ${mLabel(r.month)} · ผู้ตรวจ ${r.inspector}`,r.mile?`🛣️ เลขไมล์ ${fmt(r.mile)} กม.`:'',camS(r)?`📹 กล้องหน้ารถ: ${CAML[camS(r)]}`:'',
   r.result==='issue'?`⚠️ พบความผิดปกติ ${bad.length} รายการ`:'✅ ปกติ ไม่พบปัญหา',...bad.map((k,i)=>`  ${i+1}. ${CKL[k]}${r.checks[k].n?' — '+r.checks[k].n:''}`),
