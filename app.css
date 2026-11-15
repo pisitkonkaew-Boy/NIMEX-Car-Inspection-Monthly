@@ -55,6 +55,7 @@ button.kpi[aria-pressed="true"]{box-shadow:0 0 0 3px var(--gold-l) inset}
 .seg2 button{border:0;background:transparent;padding:7px 12px;border-radius:8px;font-family:var(--font-h);font-size:13.5px;color:var(--muted);min-height:38px;white-space:nowrap;flex:1 0 auto}
 .seg2 button[aria-pressed="true"]{background:var(--navy2);color:#fff}
 .seg2 button b{font-weight:500;opacity:.75;margin-left:3px}
+.cstat button b{font-size:15px;font-weight:600;opacity:1;margin-left:6px}
 
 /* car list */
 .list{display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}

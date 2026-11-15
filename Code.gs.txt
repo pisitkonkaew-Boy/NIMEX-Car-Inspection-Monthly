@@ -59,19 +59,20 @@ function fid_(x){return x&&typeof x==='string'&&x.indexOf('d:')===0?x.slice(2).s
 function carPhotos_(rec,x){var ph={};if(rec){for(var g in GROUPS)GROUPS[g].forEach(function(k){var v=rec.photos[k];if(Array.isArray(v))v.forEach(function(y,i){var id=fid_(y);if(id)ph[k+(i+1)]=id});else{var id=fid_(v);if(id)ph[k]=id}})}
  var o=(x&&x.ph)||{};for(var k in o){if(o[k]==='-')delete ph[k];else if(o[k])ph[k]=o[k]}return ph}
 function grpOf_(k){for(var g in GROUPS)for(var i=0;i<GROUPS[g].length;i++)if(k.indexOf(GROUPS[g][i])===0)return g;return null}
-function catPublic_(){var c=CacheService.getScriptCache(),hit=c.get('cat-v1');if(hit)return JSON.parse(hit);
+function catPublic_(){var c=CacheService.getScriptCache(),hit=c.get('cat-v2');if(hit)return JSON.parse(hit);
  var cs=cars_(false),L=latest_(true),set=getSet_('cat',{}),glob=set.glob||{},per=set.per||{},carx=getSet_('carx',{});
  var vis=function(pl,k){var p=per[pl]||{};if(k in p)return !!p[k];return k in glob?!!glob[k]:!!CAT_DEF[k]};
- var out={cars:cs.cars.map(function(r){var pl=r[0],x=carx[pl]||{},all=carPhotos_(L[pl],x),ph={};
+ /* ผู้ชมเห็นเฉพาะรถที่แอดมินกด "ตรวจสอบแล้ว ส่งรูปขึ้น Catalog" (รถที่รอส่งรูป / ยังไม่ตรวจ ไม่ถูกส่งออกไปเลย) */
+ var out={apOnly:1,cars:cs.cars.filter(function(r){return !!L[r[0]]}).map(function(r){var pl=r[0],x=carx[pl]||{},all=carPhotos_(L[pl],x),ph={};
    for(var k in all){var g=grpOf_(k);if(g&&vis(pl,g))ph[k]=all[k]}
    return{pl:pl,ty:r[1],dc:r[3],g:r[4],yr:vis(pl,'year')?(x.yr||r[2]):'',pr:vis(pl,'price')?(x.pr||''):'',ph:ph}}),dcs:cs.dcs,opt:{dcpage:'dcpage' in glob?!!glob.dcpage:false}};
- try{c.put('cat-v1',JSON.stringify(out),300)}catch(e){}return out}
+ try{c.put('cat-v2',JSON.stringify(out),300)}catch(e){}return out}
 function catAdmin_(){var cs=cars_(false),L=latest_(true),A=latest_(false),carx=getSet_('carx',{}),ap=getSet_('appr',{});
  return{ok:true,dcs:cs.dcs,set:getSet_('cat',{}),def:CAT_DEF,carx:carx,cars:cs.cars.map(function(r){var pl=r[0],x=carx[pl]||{},rec=L[pl],last=A[pl];
   return{pl:pl,ty:r[1],dc:r[3],g:r[4],yr0:r[2],yr:x.yr||r[2],pr:x.pr||'',ph:carPhotos_(rec,x),
    wait:last&&!ap[last.id]?last.month:'',
    ins:rec?{m:rec.month,st:rec.status,res:rec.result,by:rec.inspector,mile:rec.mile,upd:rec.updated,checks:rec.checks,tyres:rec.tyres,issue:rec.issue,ap:ap[rec.id]||null}:null}})}}
-function catClear_(){CacheService.getScriptCache().remove('cat-v1')}
+function catClear_(){CacheService.getScriptCache().remove('cat-v2')}
 
 /* ---------- รูปภาพใน Google Drive ---------- */
 function root_(){var p=props_(),id=p.getProperty('PHOTO_FOLDER_ID');if(id){try{return DriveApp.getFolderById(id)}catch(e){}}
