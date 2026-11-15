@@ -626,12 +626,20 @@ async function infographic(M){const W=1920,H=1080,A=M.A,e=s=>String(s).replace(/
  /* 1 abnormal by category (region filter applies) */
  const catItems=SUMK.slice(4).map(([k,l])=>[l.replace(' หน้า-หลัง',''),A[k]]);
  s+=panel(PX[0],PY[0],PW,PH,'รถไม่ปกติ แยกตามหมวด',M.zl)+legend(PX[0]+PW-330,PY[0]+80,[[AB,'AB รถแห้ง'],[BLUE,'CC รถเย็น']])+bars(PX[0]+10,PY[0]+96,PW-20,PH-112,catItems,[[AB,it=>it[1].AB],[BLUE,it=>it[1].CC]],(v)=>v+' คัน');
- /* 2 abnormal cars per region, AB vs CC (all regions) */
- s+=panel(PX[1],PY[0],PW,PH,'รถไม่ปกติรายภาค (AB / CC)','ทุกภาค')+legend(PX[1]+PW-330,PY[0]+80,[[AB,'AB รถแห้ง'],[BLUE,'CC รถเย็น']])+bars(PX[1]+10,PY[0]+96,PW-20,PH-112,M.zones,[[AB,it=>it[1].bad.AB],[BLUE,it=>it[1].bad.CC]],v=>v+' คัน');
- /* 3 two related indicators per region */
- s+=panel(PX[0],PY[1],PW,PH,'ตรวจครบ % และ ไม่ปกติ % รายภาค','ทุกภาค')+legend(PX[0]+PW-330,PY[1]+80,[[BLUE,'% ตรวจครบ'],[BAD,'% ไม่ปกติ']])+bars(PX[0]+10,PY[1]+96,PW-20,PH-112,M.zones,[[BLUE,it=>it[1].all.T?it[1].done.T/it[1].all.T*100:0],[BAD,it=>it[1].done.T?it[1].bad.T/it[1].done.T*100:0]],(v,it,j)=>(Math.round(v*10)/10)+'%'+(j===0?` (${it[1].done.T}/${it[1].all.T})`:''),100);
- /* 4 donut: normal / abnormal / not done + 3 worst DCs */
- {const X=PX[1],Y=PY[1],cx=X+190,cy=Y+190,R=105,tot=Math.max(1,A.all.T),seg=[[A.ok.T,BLUE,'ปกติ'],[A.bad.T,BAD,'ไม่ปกติ'],[A.all.T-A.done.T,GREY,'ยังไม่ตรวจ/ไม่ครบ']];let a0=-Math.PI/2;
+ /* 2 all regions as one tall table with mini bars (12+ regions do not fit as bar rows) */
+ {const X=PX[1],Y=PY[0],H2=PH*2+20,Z=M.zones,all=aggSum(S.cars),n=Math.max(Z.length,1),top=Y+118,rh=Math.min(54,(H2-118-64)/n),fs=rh>=40?20:rh>=30?18:15,
+   C={name:X+24,cars:X+250,bar:X+296,barW:130,pct:X+440,bad:X+712,bpct:X+PW-24};
+  s+=panel(X,Y,PW,H2,'ผลรายภาค','ทุกภาค');
+  s+=`<text x="${C.name}" y="${Y+92}" font-size="16" fill="${MUT}">ภาค</text><text x="${C.cars}" y="${Y+92}" font-size="16" fill="${MUT}" text-anchor="middle">รถ</text><text x="${C.bar}" y="${Y+92}" font-size="16" fill="${MUT}">ตรวจครบ</text><text x="${C.bad}" y="${Y+92}" font-size="16" fill="${MUT}" text-anchor="middle">ไม่ปกติ (AB / CC)</text><text x="${C.bpct}" y="${Y+92}" font-size="16" fill="${MUT}" text-anchor="end">% ไม่ปกติ</text><line x1="${X+20}" x2="${X+PW-20}" y1="${Y+106}" y2="${Y+106}" stroke="#dbe3f0"/>`;
+  const row=(lbl,a,y,strong)=>{const dp=a.all.T?a.done.T/a.all.T:0,bp=a.done.T?a.bad.T/a.done.T:0,mid=y+rh/2+fs*0.36,bh=Math.max(8,Math.min(16,rh*0.36)),w=strong?600:400;
+   return`<text x="${C.name}" y="${mid}" font-size="${fs}" font-weight="${strong?600:500}" fill="${INK}">${e(String(lbl).slice(0,14))}</text><text x="${C.cars}" y="${mid}" font-size="${fs}" font-weight="${w}" fill="${INK}" text-anchor="middle">${fmt(a.all.T)}</text>`+
+    `<rect x="${C.bar}" y="${y+(rh-bh)/2}" width="${C.barW}" height="${bh}" rx="${bh/2}" fill="#e9eef7"/><rect x="${C.bar}" y="${y+(rh-bh)/2}" width="${Math.max(dp>0?bh:0,dp*C.barW)}" height="${bh}" rx="${bh/2}" fill="${BLUE}"/><text x="${C.pct}" y="${mid}" font-size="${fs-2}" font-weight="${w}" fill="${INK}">${p1(dp)} <tspan fill="${MUT}" font-size="${fs-4}">(${a.done.T}/${a.all.T})</tspan></text>`+
+    `<text x="${C.bad}" y="${mid}" font-size="${fs}" font-weight="600" fill="${a.bad.T?BAD:MUT}" text-anchor="middle">${a.bad.T} <tspan font-weight="400" font-size="${fs-3}" fill="${MUT}">(${a.bad.AB} / ${a.bad.CC})</tspan></text>`+
+    `<text x="${C.bpct}" y="${mid}" font-size="${fs}" font-weight="600" fill="${a.done.T&&a.bad.T?BAD:MUT}" text-anchor="end">${a.done.T?p1(bp):'–'}</text>`};
+  Z.forEach(([z,a],i)=>{const y=top+i*rh;if(i%2)s+=`<rect x="${X+12}" y="${y}" width="${PW-24}" height="${rh}" rx="8" fill="#f5f7fb"/>`;s+=row(z,a,y)});
+  const yt=Y+H2-60;s+=`<line x1="${X+20}" x2="${X+PW-20}" y1="${yt-4}" y2="${yt-4}" stroke="#0a2a5e" stroke-width="1.5"/>`+row('รวมทั้งประเทศ',all,yt,true).replace(/font-size="15"/g,'font-size="18"')}
+ /* 3 donut: normal / abnormal / not done + 3 worst DCs */
+ {const X=PX[0],Y=PY[1],cx=X+190,cy=Y+190,R=105,tot=Math.max(1,A.all.T),seg=[[A.ok.T,BLUE,'ปกติ'],[A.bad.T,BAD,'ไม่ปกติ'],[A.all.T-A.done.T,GREY,'ยังไม่ตรวจ/ไม่ครบ']];let a0=-Math.PI/2;
   s+=panel(X,Y,PW,PH,'สัดส่วนผลตรวจ + DC ไม่ปกติสูงสุด',M.zl)+`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#e9eef7" stroke-width="40"/>`;
   seg.forEach(([v,col])=>{if(!v)return;const a1=a0+v/tot*2*Math.PI;if(v>=tot){s+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${col}" stroke-width="40"/>`}else s+=`<path d="M ${cx+R*Math.cos(a0)} ${cy+R*Math.sin(a0)} A ${R} ${R} 0 ${a1-a0>Math.PI?1:0} 1 ${cx+R*Math.cos(a1)} ${cy+R*Math.sin(a1)}" fill="none" stroke="${col}" stroke-width="40"/>`;a0=a1});
   s+=`<text x="${cx}" y="${cy+4}" font-size="40" font-weight="600" fill="${INK}" text-anchor="middle">${fmt(A.all.T)}</text><text x="${cx}" y="${cy+36}" font-size="18" fill="${MUT}" text-anchor="middle">คัน</text>`;
