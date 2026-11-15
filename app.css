@@ -171,6 +171,9 @@ button.kpi[aria-pressed="true"]{box-shadow:0 0 0 3px var(--gold-l) inset}
 .pklist{display:grid;gap:4px;max-height:50vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px}
 .pkrow{display:flex;gap:10px;align-items:center;padding:8px 6px;border-bottom:1px solid var(--line);font-size:14.5px}
 .pkrow input{width:20px;height:20px;flex:none}
+.pkrow small.say{font-size:12.5px}
+.xgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.xgrid .btn{min-width:0}
 .apbox{display:grid;gap:10px}
 .vlist{display:grid;gap:6px}
 .vrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:14.5px}

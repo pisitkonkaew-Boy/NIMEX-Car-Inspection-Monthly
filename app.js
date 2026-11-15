@@ -381,52 +381,56 @@ async function imgFor(ref){if(!ref||isPdf(ref))return null;let src=null;
  if(ref.startsWith('l:')&&S.LOCAL[ref.slice(2)])src=S.LOCAL[ref.slice(2)];
  else{const id=driveId(ref);if(!id)return null;S.IMG=S.IMG||{};if(!S.IMG[id]){const j=await api({a:'img',id});S.IMG[id]=URL.createObjectURL(b64Blob(j.data,j.mime))}src=S.IMG[id]}
  return await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=src})}
-/* 2000x1125 PNG of the sheet, drawn on a canvas (Prompt font, no html2canvas) */
-/* 2000x1125 summary image in the NIMEX theme (navy / gold, white cards; red only for problems). Drawn on a canvas with the Prompt font. */
+/* show the whole photo, never cropped: a blurred copy of the same photo fills the rest of the frame */
+function fitPhoto(x,img,X,Y,w,h,rad,empty){x.save();x.beginPath();x.roundRect(X,Y,w,h,rad);x.clip();
+ if(img){const s=Math.max(w/img.width,h/img.height)*1.12,bw=img.width*s,bh=img.height*s;x.fillStyle='#0a2a5e';x.fillRect(X,Y,w,h);
+  if(typeof x.filter==='string'){x.filter='blur(16px)';x.drawImage(img,X+(w-bw)/2,Y+(h-bh)/2,bw,bh);x.filter='none'}
+  else{/* Safari has no canvas filter: a tiny copy stretched back up looks the same */const t=document.createElement('canvas');t.width=28;t.height=Math.max(2,Math.round(28*h/w));const tx=t.getContext('2d'),q=Math.max(t.width/img.width,t.height/img.height);
+   tx.drawImage(img,(t.width-img.width*q)/2,(t.height-img.height*q)/2,img.width*q,img.height*q);x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.drawImage(t,X,Y,w,h)}
+  x.fillStyle='rgba(6,26,61,.30)';x.fillRect(X,Y,w,h);const c=Math.min(w/img.width,h/img.height),iw=img.width*c,ih=img.height*c;x.drawImage(img,X+(w-iw)/2,Y+(h-ih)/2,iw,ih)}
+ else{x.fillStyle='#e9eef7';x.fillRect(X,Y,w,h);x.font='500 20px Prompt, sans-serif';x.fillStyle='#7a8aa5';x.textAlign='center';x.textBaseline='middle';x.fillText(empty||'ไม่มีรูป',X+w/2,Y+h/2,w-20)}
+ x.restore()}
+/* 2000x1125 summary image in the NIMEX theme (navy / gold, white cards; red only for problems). Drawn on a canvas with the Prompt font.
+   Three rows; every photo in a row has the same size, so the sheet stays balanced whatever the car type. */
 async function renderSheet(r){try{await document.fonts.load('600 40px Prompt');await document.fonts.load('500 20px Prompt')}catch(e){}
  const W=2000,H=1125,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
- const NAVY='#0a2a5e',NAVY2='#123f8c',GOLD='#d4af37',INK='#0b1f3f',MUTED='#55657f',LINE='#dbe3f0',BAD='#b8334a',GOOD='#1d57b8';
+ const NAVY='#0a2a5e',GOLD='#d4af37',INK='#0b1f3f',LINE='#dbe3f0',BAD='#b8334a',GOOD='#1d57b8';
  const F=(w,s)=>`${w} ${s}px Prompt, sans-serif`,rr=(X,Y,w,h,rad)=>{x.beginPath();x.roundRect(X,Y,w,h,rad)};
  const keys=['front','back','right','left','engine','battery','odo','tFL','tFR','tRL','tRR','dFL','dFR','dRL','dRR','spare','cabin','boxF','boxB','curtainF','curtainB','curtain','dashcam'];
  const I={};let fail=0;await Promise.all(keys.map(async k=>{try{I[k]=await imgFor(r.photos[k])}catch(e){fail++}}));
  const logo=await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src='logo.png'});
  const text=(t,X,Y,font,col,al='left',max)=>{x.font=font;x.fillStyle=col;x.textAlign=al;x.textBaseline='middle';x.fillText(t,X,Y,max)};
- const cover=(img,X,Y,w,h,bad)=>{x.save();rr(X,Y,w,h,12);x.clip();if(img){const s=Math.max(w/img.width,h/img.height),iw=img.width*s,ih=img.height*s;x.drawImage(img,X+(w-iw)/2,Y+(h-ih)/2,iw,ih)}else{x.fillStyle='#e9eef7';x.fillRect(X,Y,w,h);text('ไม่มีรูป',X+w/2,Y+h/2,F(500,20),'#7a8aa5','center')}x.restore();
-  if(bad){x.strokeStyle=BAD;x.lineWidth=5;rr(X+2,Y+2,w-4,h-4,11);x.stroke()}};
- const chip=(t,X,Y,bad,center)=>{x.font=F(500,20);const tw=x.measureText(t).width+28,cx=center?X-tw/2:X;x.fillStyle=bad?BAD:'rgba(10,42,94,.86)';rr(cx,Y,tw,32,16);x.fill();text(t,cx+14,Y+17,F(500,20),'#fff')};
- const photo=(k,label,X,Y,w,h,bad)=>{cover(I[k],X,Y,w,h,bad);if(label)chip(label,X+10,Y+h-42,bad)};
+ const chip=(t,X,Y,maxW,bad)=>{let fs=20;x.font=F(500,fs);while(fs>14&&x.measureText(t).width+26>maxW){fs--;x.font=F(500,fs)}
+  const tw=Math.min(maxW,x.measureText(t).width+26);x.fillStyle=bad?BAD:'rgba(10,42,94,.88)';rr(X,Y-32,tw,32,16);x.fill();text(t,X+13,Y-15,F(500,fs),'#fff','left',tw-22)};
+ const photo=(k,label,X,Y,w,h,bad,empty)=>{fitPhoto(x,I[k],X,Y,w,h,12,empty);if(bad){x.strokeStyle=BAD;x.lineWidth=5;rr(X+2.5,Y+2.5,w-5,h-5,10);x.stroke()}if(label)chip(label,X+10,Y+h-10,w-20,bad)};
  const card=(X,Y,w,h)=>{x.fillStyle='#fff';rr(X,Y,w,h,18);x.fill();x.strokeStyle=LINE;x.lineWidth=2;rr(X,Y,w,h,18);x.stroke();x.fillStyle=GOLD;x.fillRect(X+w*0.25,Y,w*0.5,3)};
- const sec=(n,t,X,Y)=>{x.fillStyle=NAVY;x.beginPath();x.arc(X+20,Y+20,20,0,7);x.fill();text(String(n),X+20,Y+21,F(600,22),'#fff','center');text(t,X+52,Y+21,F(600,26),INK)};
+ const sec=(n,t,X,Y,maxW)=>{x.fillStyle=NAVY;x.beginPath();x.arc(X+18,Y+18,18,0,7);x.fill();text(String(n),X+18,Y+19,F(600,20),'#fff','center');text(t,X+46,Y+19,F(600,24),INK,'left',maxW-50)};
  const ck=k=>r.checks[k]&&r.checks[k].v==='bad',cs=camS(r),cats=catsOf(r);
  /* background + header */
  x.fillStyle='#eef2f9';x.fillRect(0,0,W,H);x.fillStyle=NAVY;x.fillRect(0,0,W,140);x.fillStyle=GOLD;x.fillRect(0,140,W,5);
  x.fillStyle='#fff';rr(24,18,230,104,16);x.fill();if(logo){const s=Math.min(206/logo.width,88/logo.height);x.drawImage(logo,24+(230-logo.width*s)/2,18+(104-logo.height*s)/2,logo.width*s,logo.height*s)}
  x.font=F(600,46);const t1='สำรวจรถบริษัท';text(t1,280,52,F(600,46),'#fff');text('ทั่วประเทศ',280+x.measureText(t1).width+6,52,F(600,46),GOLD);
  const pills=[[r.plate,1],[dcName(r.dc).replace(/^C?DC\s*/,'DC '),0],[TYN[r.type]||r.type,0],['ตรวจ '+dtLabel(r.updated).replace(/\s\d+:\d+$/,''),0],[r.inspector||'',0]].concat(r.mile?[[fmt(r.mile)+' กม.',0]]:[]);
- let px=280;pills.forEach(([t,hi])=>{if(!t)return;x.font=F(hi?600:500,hi?24:21);const tw=x.measureText(t).width+30;x.fillStyle=hi?GOLD:'rgba(255,255,255,.14)';rr(px,90,tw,38,19);x.fill();text(t,px+15,110,F(hi?600:500,hi?24:21),hi?NAVY:'#fff');px+=tw+10});
+ let px=280;pills.forEach(([t,hi])=>{if(!t||px>1700)return;x.font=F(hi?600:500,hi?24:21);const tw=Math.min(1720-px,x.measureText(t).width+30);x.fillStyle=hi?GOLD:'rgba(255,255,255,.14)';rr(px,90,tw,38,19);x.fill();text(t,px+15,110,F(hi?600:500,hi?24:21),hi?NAVY:'#fff','left',tw-26);px+=tw+10});
  x.fillStyle=cats.any?BAD:GOOD;rr(1740,26,236,90,18);x.fill();text('ผลตรวจ',1858,50,F(500,20),'#e6eefb','center');text(cats.any?'ไม่ปกติ':'ปกติ',1858,88,F(600,38),'#fff','center');
- /* 1 four sides (+ dash cam on the left when the car has one) */
- card(16,160,1968,320);sec(1,'ภาพรถเต็มคัน 4 ด้าน',36,176);
- const hasCam=cs&&cs!=='none'&&r.photos.dashcam;let x0=36;
- if(hasCam){const bad=cs==='broken'||cs==='card';text('กล้องหน้ารถ',36,240,F(500,20),MUTED);photo('dashcam',CAML[cs],36,258,330,204,bad);x0=388}
- const gw=(1964-x0-3*14)/4;[['front','ด้านหน้า'],['back','ด้านหลัง'],['right','ด้านข้างขวา'],['left','ด้านข้างซ้าย']].forEach(([k,l],i)=>photo(k,l,x0+i*(gw+14),226,gw,236));
- /* 2 engine / battery / odometer   3 tyres */
- card(16,496,800,224);sec(2,'ห้องเครื่อง / แบตเตอรี่ / เลขไมล์',36,512);
- photo('engine','ห้องเครื่อง',36,562,330,142);photo('battery','แบตเตอรี่',380,562,206,142);photo('odo',r.mile?fmt(r.mile)+' กม.':'เลขไมล์',600,562,196,142);
- card(832,496,1152,224);sec(3,'ยางถ่ายเต็มวง 4 เส้น',852,512);
- const tw4=(1964-852-3*12)/4;[['tFL','หน้าซ้าย'],['tFR','หน้าขวา'],['tRL','หลังซ้าย'],['tRR','หลังขวา']].forEach(([k,l],i)=>photo(k,l,852+i*(tw4+12),562,tw4,142));
- /* 4 tyre year */
- card(16,736,1968,150);sec(4,'ปียาง',36,752);text('สัปดาห์+ปี (WWYY)',88,808,F(400,18),MUTED);
- const dw=(1964-380-3*14)/4;TY.forEach(([k,l],i)=>{const X=380+i*(dw+14),a=tyreAge(r.tyres[k]),old=a!=null&&a>=MAXY;cover(I['d'+k],X,750,dw,86,old);
-  const lab=`${l} ${r.tyres[k]||'-'}${a!=null?' · '+Math.floor(a)+' ปี':''}${old?' · ยางเก่า':''}`;chip(lab,X+dw/2,842,old,true)});
- /* 5 spare  6 cabin  7 box  8 curtain (042) */
- const cc=r.type==='042'||r.photos.curtainF||r.photos.curtain;const Y=902,h=208;
- const cols=cc?[[16,380],[408,460],[880,548],[1440,544]]:[[16,520],[548,640],[1200,784]];
- card(cols[0][0],Y,cols[0][1],h);sec(5,'ยางอะไหล่',cols[0][0]+20,Y+16);photo('spare','',cols[0][0]+20,Y+64,cols[0][1]-40,h-82);
- card(cols[1][0],Y,cols[1][1],h);sec(6,'ห้องโดยสาร',cols[1][0]+20,Y+16);photo('cabin','',cols[1][0]+20,Y+64,cols[1][1]-40,h-82);
- card(cols[2][0],Y,cols[2][1],h);sec(7,'ภายในตู้ หน้า-หลัง',cols[2][0]+20,Y+16);{const bw=(cols[2][1]-52)/2;photo('boxF','หน้า',cols[2][0]+20,Y+64,bw,h-82);photo('boxB','หลัง',cols[2][0]+32+bw,Y+64,bw,h-82)}
- if(cc){card(cols[3][0],Y,cols[3][1],h);sec(8,'ม่านความเย็น',cols[3][0]+20,Y+16);const bw=(cols[3][1]-52)/2;
-  [['curtainF','หน้า'],['curtainB','หลัง']].forEach(([k,l],i)=>{const st=r.checks[k]&&r.checks[k].v;photo(r.photos[k]?k:'curtain',l+(st?(st==='bad'?' · ไม่ปกติ':' · ปกติ'):''),cols[3][0]+20+i*(bw+12),Y+64,bw,h-82,ck(k))})}
+ /* photo groups: [title, [[key, label, bad, text when there is no photo]]] */
+ const tyreLbl=k=>{const a=tyreAge(r.tyres[k]),old=a!=null&&a>=MAXY;return[`${TY.find(t=>t[0]===k)[1]} ${r.tyres[k]||'-'}${a==null?'':old?' · '+Math.floor(a)+' ปี · ยางเก่า':' · '+(a<1?Math.floor(a*12)+' เดือน':Math.floor(a)+' ปี')}`,old]};
+ const curt=k=>{const st=r.checks[k]&&r.checks[k].v;return[r.photos[k]?k:'curtain',(k==='curtainF'?'หน้า':'หลัง')+(st?(st==='bad'?' · ไม่ปกติ':' · ปกติ'):''),ck(k)]};
+ const G={body:['ภาพรถเต็มคัน 4 ด้าน',[['front','ด้านหน้า'],['back','ด้านหลัง'],['left','ด้านซ้าย'],['right','ด้านขวา']]],
+  cam:['กล้องหน้ารถ',[['dashcam',cs?CAML[cs]:'',cs==='broken'||cs==='card',cs==='none'?'ไม่มีกล้องหน้ารถ':'ไม่มีรูป']]],
+  eng:['ห้องเครื่อง / แบตเตอรี่ / เลขไมล์',[['engine','ห้องเครื่อง'],['battery','แบตเตอรี่'],['odo',r.mile?fmt(r.mile)+' กม.':'เลขไมล์']]],
+  tyre:['ยางถ่ายเต็มวง 4 เส้น',TY.map(([k,l])=>['t'+k,l])],
+  dot:['ปียาง (สัปดาห์+ปี)',TY.map(([k])=>['d'+k,...tyreLbl(k)])],
+  sc:['ยางอะไหล่ / ห้องโดยสาร',[['spare','ยางอะไหล่'],['cabin','ห้องโดยสาร']]],
+  box:['ภายในตู้ หน้า-หลัง',[['boxF','หน้า',ck('door')],['boxB','หลัง',ck('door')]]],
+  cur:['ม่านความเย็น',[curt('curtainF'),curt('curtainB')]]};
+ const cc=r.type==='042'||r.photos.curtainF||r.photos.curtainB||r.photos.curtain;
+ const ROWS=cc?[[G.body,G.cam],[G.eng,G.tyre,G.sc],[G.dot,G.box,G.cur]]:[[G.body,G.cam],[G.eng,G.tyre],[G.dot,G.sc,G.box]];
+ const TH=[290,202,202],PAD=18,GC=16,GT=12,HEAD=56;let Y=160,n=0;
+ ROWS.forEach((groups,ri)=>{const nT=groups.reduce((a,g)=>a+g[1].length,0),ng=groups.length,th=TH[ri],tw=(W-32-GC*(ng-1)-2*PAD*ng-GT*(nT-ng))/nT;let X=16;
+  groups.forEach(([t,tiles])=>{const cw=2*PAD+tiles.length*tw+(tiles.length-1)*GT;card(X,Y,cw,HEAD+th+PAD);sec(++n,t,X+PAD,Y+12,cw-2*PAD);
+   tiles.forEach(([k,l,bad,empty],i)=>photo(k,l,X+PAD+i*(tw+GT),Y+HEAD,tw,th,bad,empty));X+=cw+GC});
+  Y+=HEAD+th+PAD+14});
  if(fail)toast('บางรูปโหลดไม่ได้ ลองใหม่เมื่อมีสัญญาณ',true);
  return await new Promise(res=>c.toBlob(res,'image/png'))}
 async function saveBlob(blob,name){const file=new File([blob],name,{type:blob.type});
@@ -461,34 +465,191 @@ const SUMH={cam:'กล้องเสีย / การ์ดเสีย',tyre
 function aggSum(cars){const a={};SUMK.forEach(([k])=>a[k]={AB:0,CC:0,T:0});a.wait={AB:0,CC:0,T:0};a.none={AB:0,CC:0,T:0};
  cars.forEach(c=>{const t=ABCC(c.ty)||'AB',s=stateOf(c.pl),add=k=>{a[k][t]++;a[k].T++};add('all');if(s.k!=='done'){add('none');return}
   add('done');add(s.c.any?'bad':'ok');['cam','tyre','body','box'].forEach(k=>{if(s.c[k])add(k)});if(!s.ap)add('wait')});return a}
+const zoneOf=c=>(S.dcs[c.dc]||{}).zone||'อื่นๆ',zCars=z=>z&&z!=='all'?S.cars.filter(c=>zoneOf(c)===z):S.cars;
 function viewSum(){$('#ttl').textContent='สรุปการตรวจ';$('#sub').textContent=mLabel(S.month)+' · เฉพาะผู้ดูแล';
- const A=aggSum(S.cars),pct=(a,b)=>b?Math.round(a/b*100)+'%':'0%';
+ const Z=S.sumZone||'all',CARS=zCars(Z),A=aggSum(CARS),pct=(a,b)=>b?Math.round(a/b*100)+'%':'0%';
  const card=([k,l,bar],sub)=>`<button type="button" class="kpi kab" data-kf="${k}" style="--bar:${bar}"><span class="l">${l}</span><span class="v">${fmt(A[k].T)}${k==='all'?' <small>คัน</small>':''}</span>${sub?`<span class="d">${sub}</span>`:''}<span class="ab"><i>AB <b>${fmt(A[k].AB)}</b></i><i>CC <b>${fmt(A[k].CC)}</b></i></span></button>`;
  const row=(lbl,cs,attr,cls)=>{const a=aggSum(cs);return`<tr${attr||''}${cls?` class="${cls}"`:''}><td>${lbl}</td><td>${fmt(a.all.T)}</td><td>${fmt(a.done.T)}<span class="pbar"><i style="width:${pct(a.done.T,a.all.T)}"></i></span></td><td>${fmt(a.ok.T)}</td><td${a.bad.T?' class="badt"':''}>${fmt(a.bad.T)}</td><td>${a.none.T?fmt(a.none.T):'-'}</td><td>${a.wait.T?fmt(a.wait.T):'-'}</td></tr>`};
- const body=S.zones.map(z=>{const dcs=Object.values(S.dcs).filter(d=>d.zone===z).map(d=>[d,S.cars.filter(c=>c.dc===d.dc)]).filter(x=>x[1].length);if(!dcs.length)return'';
+ const body=S.zones.filter(z=>Z==='all'||z===Z).map(z=>{const dcs=Object.values(S.dcs).filter(d=>d.zone===z).map(d=>[d,S.cars.filter(c=>c.dc===d.dc)]).filter(x=>x[1].length);if(!dcs.length)return'';
   return row(esc(z),dcs.flatMap(x=>x[1]),'','zone')+dcs.map(([d,cs])=>row(esc(d.name),cs,` data-dc="${d.dc}"`)).join('')}).join('');
- $('#view').innerHTML=`<p class="eyebrow">ตรวจสภาพรถประจำเดือน · เฉพาะผู้ดูแล</p><div class="page-h"><h1>สรุปทั่วประเทศ · ${mLabel(S.month)}</h1><p class="say">ตรวจครบ ${pct(A.done.T,A.all.T)} · รอส่งรูปขึ้น Catalog ${fmt(A.wait.T)} คัน · แตะการ์ดเพื่อดูรายชื่อรถ</p></div>
+ $('#view').innerHTML=`<p class="eyebrow">ตรวจสภาพรถประจำเดือน · เฉพาะผู้ดูแล</p><div class="page-h"><h1>สรุป${Z==='all'?'ทั่วประเทศ':' '+esc(Z)} · ${mLabel(S.month)}</h1><p class="say">ตรวจครบ ${pct(A.done.T,A.all.T)} · รอส่งรูปขึ้น Catalog ${fmt(A.wait.T)} คัน · แตะการ์ดเพื่อดูรายชื่อรถ</p></div>
+ <div class="tools"><select id="msel" aria-label="เดือน">${monthOpts()}</select><select id="zsel" aria-label="ภาค"><option value="all">ทุกภาค</option>${S.zones.map(z=>`<option${z===Z?' selected':''}>${esc(z)}</option>`).join('')}</select><button type="button" class="btn alt" id="s-share">${IC.share}แชร์ / ส่งออก</button><button type="button" class="btn gold" id="s-ig">${IC.chart}อินโฟกราฟิก 16:9</button></div>
  <div class="kpis k8">${SUMK.slice(0,4).map((k,i)=>card(k,i===1?pct(A.done.T,A.all.T)+' ของรถทั้งหมด':'')).join('')}</div>
  <p class="eyebrow" style="margin:0">ไม่ปกติ แยกตามหมวด</p>
  <div class="kpis k8">${SUMK.slice(4).map(k=>card(k,SUMH[k[0]])).join('')}</div>
- <div class="tools"><select id="msel" aria-label="เดือน">${monthOpts()}</select><button type="button" class="btn alt" id="s-xl">${IC.share}Excel</button><button type="button" class="btn alt" id="s-txt">${IC.share}แชร์สรุป</button></div>
- <div class="card"><h2>แยกภาค / DC</h2><p class="note">แตะชื่อ DC เพื่อดูรายการรถ · ข้อมูลชุดเดียวกันนี้อยู่ใน Google Sheet แท็บ Summary และ Detail</p><div class="tw"><table class="t"><thead><tr><th>ภาค / DC</th><th>รถ</th><th>ตรวจครบ</th><th>ปกติ</th><th>ไม่ปกติ</th><th>ยังไม่ตรวจ</th><th>รอส่งรูป</th></tr></thead><tbody>${body}${row('รวม',S.cars,'','sum')}</tbody></table></div></div>`;
+ <div class="card"><h2>แยกภาค / DC</h2><p class="note">แตะชื่อ DC เพื่อดูรายการรถ · ข้อมูลชุดเดียวกันนี้อยู่ใน Google Sheet แท็บ Summary และ Detail</p><div class="tw"><table class="t"><thead><tr><th>ภาค / DC</th><th>รถ</th><th>ตรวจครบ</th><th>ปกติ</th><th>ไม่ปกติ</th><th>ยังไม่ตรวจ</th><th>รอส่งรูป</th></tr></thead><tbody>${body}${row('รวม',CARS,'','sum')}</tbody></table></div></div>`;
  $('#msel').onchange=async e=>{S.month=e.target.value;try{await loadRecs(S.month)}catch(x){}viewSum()};
+ $('#zsel').onchange=e=>{S.sumZone=e.target.value;viewSum()};
  $$('[data-kf]').forEach(b=>b.onclick=()=>{S.dcSel='all';S.filt=b.dataset.kf;go('cars')});
  $$('tr[data-dc]').forEach(tr=>tr.onclick=()=>{S.dcSel=tr.dataset.dc;S.filt='all';go('cars')});
- $('#s-txt').onclick=()=>{const L=k=>`${fmt(A[k].T)} (AB ${A[k].AB} · CC ${A[k].CC})`;
-  shareText([`📋 สรุปตรวจสภาพรถ ${mLabel(S.month)}`,`🚚 รถทั้งหมด ${L('all')}`,`✅ ตรวจครบ ${L('done')} · ${pct(A.done.T,A.all.T)}`,`🟦 ปกติ ${L('ok')}`,`⚠️ ไม่ปกติ ${L('bad')}`,`  📹 กล้องหน้ารถ ${L('cam')}`,`  🛞 ยางรถยนต์ ${L('tyre')}`,`  🚗 ภาพรอบคัน ${L('body')}`,`  📦 ภายในตู้ ${L('box')}`].join('\n'))};
- $('#s-xl').onclick=exportXlsx}
-async function exportXlsx(){if(!window.XLSX)return toast('กำลังโหลดตัวสร้าง Excel ลองอีกครั้ง',true);if(S.loadedMonth!==S.month){try{await loadRecs(S.month)}catch(e){}}
- const recs=S.cars.map(c=>[c,S.pend[S.month+'|'+c.pl]||S.recs[c.pl]]);const link=r=>{const id=driveId(r);return id?`https://drive.google.com/file/d/${id}/view`:''};
+ $('#s-share').onclick=shareSheet;$('#s-ig').onclick=()=>runExp('ig')}
+
+/* ---------- share / export (NIMEX skill): tick topics → Excel / PowerPoint / long PNG / text, plus a 16:9 infographic.
+   Everything follows the month and region chosen on the summary page. No grades and no previous-month comparison (per owner). ---------- */
+const SH={kpi:1,zone:1,dc10:1,grp:1,cars:1,bw_done:0,bw_bad:0};
+/* indicators for best / worst: [label, value of an aggSum, higher is better] */
+const IND={done:['% ตรวจครบ',a=>a.all.T?a.done.T/a.all.T:null,true],bad:['% ไม่ปกติ',a=>a.done.T?a.bad.T/a.done.T:null,false]};
+const p1=v=>(Math.round(v*1000)/10)+'%',pctS=(a,b)=>b?p1(a/b):'-';
+function shModel(){const z=S.sumZone||'all',cars=zCars(z),A=aggSum(cars);
+ const zones=S.zones.map(n=>[n,aggSum(zCars(n))]).filter(x=>x[1].all.T);
+ const dcs=Object.values(S.dcs).map(d=>[d.name,d.zone,aggSum(cars.filter(c=>c.dc===d.dc))]).filter(x=>x[2].all.T);
+ const rate=a=>a.done.T?a.bad.T/a.done.T:0;
+ const dc10=dcs.filter(x=>x[2].bad.T).sort((a,b)=>rate(b[2])-rate(a[2])||b[2].bad.T-a[2].bad.T).slice(0,10);
+ const badCars=cars.map(c=>[c,stateOf(c.pl)]).filter(([,s])=>s.k==='done'&&s.c.any);
+ return{z,zl:z==='all'?'ทุกภาค':z,cars,A,zones,dcs,dc10,badCars,ml:mLabel(S.month)}}
+/* best n + worst n, never overlapping; with too few entries each side gets half of them */
+function bestWorst(list,key,n){const[,f,hi]=IND[key],v=list.map(x=>[x,f(x[x.length-1])]).filter(x=>x[1]!=null).sort((a,b)=>(hi?b[1]-a[1]:a[1]-b[1])||String(a[0][0]).localeCompare(String(b[0][0]),'th'));
+ const k=v.length>=2*n?n:Math.floor(v.length/2);return{best:v.slice(0,k),worst:v.slice(v.length-k).reverse(),all:v,k}}
+function badWhat(s){const r=s.r,c=s.c,n=badList(r).map(k=>CKL[k]||k);if(c.cam)n.push('กล้องหน้ารถ: '+CAML[camS(r)]);if(c.tyre)n.push('ยางเก่า');if(r.photos.damage.length&&!n.length)n.push('มีรูปจุดผิดปกติ');if(!n.length&&r.issue.v==='has')n.push(r.issue.t||'พบความผิดปกติ');return[...new Set(n)].join(', ')}
+const aRow=a=>[a.all.T,a.done.T,pctS(a.done.T,a.all.T),a.ok.T,a.bad.T,pctS(a.bad.T,a.done.T),a.cam.T,a.tyre.T,a.body.T,a.box.T];
+const AHEAD=['รถ','ตรวจครบ','% ตรวจครบ','ปกติ','ไม่ปกติ','% ไม่ปกติ','กล้อง','ยาง','รอบคัน','ภายในตู้'];
+/* one table per ticked topic; Excel, PowerPoint and the long PNG are all drawn from these */
+function shTables(M){const A=M.A,T=[];
+ if(SH.kpi)T.push({k:'kpi',t:'KPI หลัก',note:'สัดส่วน: ตรวจครบเทียบรถทั้งหมด · หัวข้ออื่นเทียบรถที่ตรวจครบ',head:['หัวข้อ','รวม','AB','CC','สัดส่วน'],
+  rows:SUMK.map(([k,l])=>[l,A[k].T,A[k].AB,A[k].CC,k==='all'?'':k==='done'?pctS(A.done.T,A.all.T):pctS(A[k].T,A.done.T)]),bad:r=>['ไม่ปกติ','กล้องหน้ารถ','ยางรถยนต์','ภาพรอบคัน','ภายในตู้ หน้า-หลัง'].includes(r[0])});
+ if(SH.zone){const all=aggSum(S.cars);T.push({k:'zone',t:'ผลรายภาค',note:'แสดงทุกภาคเพื่อเทียบกัน',head:['ภาค',...AHEAD],rows:[...M.zones.map(([z,a])=>[z,...aRow(a)]),['รวมทั้งประเทศ',...aRow(all)]]})}
+ if(SH.dc10)T.push({k:'dc10',t:'DC ที่พบรถไม่ปกติมากที่สุด 10 อันดับ',note:'เรียงตาม % ไม่ปกติของรถที่ตรวจครบ'+(M.z==='all'?'':' · '+M.zl),head:['อันดับ','DC','ภาค','ตรวจครบ','ไม่ปกติ','% ไม่ปกติ','กล้อง','ยาง','รอบคัน','ภายในตู้'],
+  rows:M.dc10.map(([n,z,a],i)=>[i+1,n,z,a.done.T,a.bad.T,pctS(a.bad.T,a.done.T),a.cam.T,a.tyre.T,a.body.T,a.box.T]),empty:'ไม่มี DC ที่พบรถไม่ปกติ'});
+ if(SH.grp){const g=t=>{const o={};Object.keys(A).forEach(k=>o[k]={T:A[k][t]});return o};T.push({k:'grp',t:'แยกชนิดรถ AB / CC',head:['ชนิด',...AHEAD],rows:[['AB รถแห้ง',...aRow(g('AB'))],['CC รถเย็น',...aRow(g('CC'))],['รวม',...aRow(A)]]})}
+ ['done','bad'].forEach(key=>{if(!SH['bw_'+key])return;const lbl=IND[key][0],rows=[],full=[];
+  [['DC',M.dcs,5],['ภาค',M.zones,3]].forEach(([nm,list,n])=>{const b=bestWorst(list,key,n),bs=new Set(b.best.map(x=>x[0])),ws=new Set(b.worst.map(x=>x[0]));
+   b.best.forEach(([x,v],i)=>rows.push([nm,'ดีสุด',i+1,x[0],p1(v)]));b.worst.forEach(([x,v],i)=>rows.push([nm,'แย่สุด',i+1,x[0],p1(v)]));
+   b.all.forEach(([x,v],i)=>full.push([nm,bs.has(x)?'ดีสุด':ws.has(x)?'แย่สุด':'',i+1,x[0],p1(v)]))});
+  T.push({k:'bw_'+key,t:'ดีสุด / แย่สุด · '+lbl,note:(IND[key][2]?'สูง = ดี':'ต่ำ = ดี')+' · DC ดีสุด/แย่สุด 5 · ภาค 3 (ถ้ามีน้อยกว่าใช้ครึ่งหนึ่ง)',head:['ระดับ','ป้าย','อันดับ','ชื่อ',lbl],rows,full,empty:'ข้อมูลไม่พอจัดอันดับ'})});
+ if(SH.cars)T.push({k:'cars',t:`รถที่ไม่ปกติ ${M.badCars.length} คัน`,note:'Excel มีผลตรวจทุกคันครบทุกหัวข้อ',head:['ทะเบียน','DC','ชนิด','ผู้ตรวจ','สิ่งที่ผิดปกติ'],
+  rows:M.badCars.map(([c,s])=>[c.pl,dcName(c.dc),ABCC(c.ty),s.r.inspector||'',badWhat(s)]),empty:'ไม่มีรถที่ไม่ปกติ'});
+ return T}
+function shText(M){const A=M.A,L=k=>`${fmt(A[k].T)} คัน (AB ${A[k].AB} · CC ${A[k].CC})`,o=[`📋 สรุปตรวจสภาพรถ ${M.ml} · ${M.zl}`];
+ if(SH.kpi)o.push('',`🚚 รถทั้งหมด ${L('all')}`,`✅ ตรวจครบ ${L('done')} · ${pctS(A.done.T,A.all.T)}`,`🟦 ปกติ ${L('ok')}`,`⚠️ ไม่ปกติ ${L('bad')} · ${pctS(A.bad.T,A.done.T)} ของที่ตรวจครบ`,`  📹 กล้องหน้ารถ ${L('cam')}`,`  🛞 ยางรถยนต์ ${L('tyre')}`,`  🚗 ภาพรอบคัน ${L('body')}`,`  📦 ภายในตู้ ${L('box')}`);
+ if(SH.zone){o.push('','📍 ผลรายภาค');M.zones.forEach(([z,a])=>o.push(`• ${z}: ตรวจครบ ${a.done.T}/${a.all.T} (${pctS(a.done.T,a.all.T)}) · ไม่ปกติ ${a.bad.T} คัน`))}
+ if(SH.dc10){o.push('','🔻 DC ที่พบรถไม่ปกติมากที่สุด');if(!M.dc10.length)o.push('• ไม่มี DC ที่พบรถไม่ปกติ');M.dc10.forEach(([n,,a],i)=>o.push(`${i+1}. ${n}: ${a.bad.T}/${a.done.T} คัน (${pctS(a.bad.T,a.done.T)})`))}
+ if(SH.grp){o.push('','🚛 แยกชนิดรถ');[['AB','AB รถแห้ง'],['CC','CC รถเย็น']].forEach(([t,l])=>o.push(`• ${l}: ${A.all[t]} คัน · ตรวจครบ ${A.done[t]} · ไม่ปกติ ${A.bad[t]}`))}
+ ['done','bad'].forEach(key=>{if(!SH['bw_'+key])return;o.push('',`🏆 ดีสุด / แย่สุด · ${IND[key][0]}`);
+  [['DC',M.dcs,5],['ภาค',M.zones,3]].forEach(([nm,list,n])=>{const b=bestWorst(list,key,n);if(!b.k){o.push(`• ${nm}: ข้อมูลไม่พอจัดอันดับ`);return}
+   o.push(`✅ ${nm} ดีสุด: `+b.best.map(([x,v])=>`${x[0]} ${p1(v)}`).join(' · '),`❌ ${nm} แย่สุด: `+b.worst.map(([x,v])=>`${x[0]} ${p1(v)}`).join(' · '))})});
+ if(SH.cars){o.push('',`🚨 รถไม่ปกติ ${M.badCars.length} คัน`);M.badCars.slice(0,30).forEach(([c,s],i)=>o.push(`${i+1}. ${c.pl} · ${dcName(c.dc)} · ${badWhat(s)}`));if(M.badCars.length>30)o.push(`… และอีก ${M.badCars.length-30} คัน (ดูใน Excel)`)}
+ return o.join('\n')}
+const loadJS=src=>new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('โหลดตัวช่วยไม่ได้ ตรวจสอบสัญญาณ'));document.head.appendChild(s)});
+function shareSheet(){const z=S.sumZone||'all';
+ const ck=(k,l,sub)=>`<label class="pkrow"><input type="checkbox" data-sh="${k}"${SH[k]?' checked':''}><span>${l}${sub?`<br><small class="say">${sub}</small>`:''}</span></label>`;
+ const sh=sheet(`<h2>แชร์ / ส่งออก</h2><p class="say">${mLabel(S.month)} · ${esc(z==='all'?'ทุกภาค':z)} (เปลี่ยนเดือน/ภาคได้ที่หน้าสรุป)</p>
+  <p class="eyebrow" style="margin:10px 0 4px">1. เลือกหัวข้อ</p>
+  <div class="pklist">${ck('kpi','KPI หลัก 8 ตัว','รถทั้งหมด · ตรวจครบ · ปกติ · ไม่ปกติ · กล้อง · ยาง · รอบคัน · ภายในตู้')}${ck('zone','ผลรายภาค')}${ck('dc10','DC ที่พบรถไม่ปกติมากที่สุด 10 อันดับ')}${ck('grp','แยกชนิดรถ AB / CC')}
+  ${ck('bw_done','ดีสุด / แย่สุด · % ตรวจครบ','DC 5 + ภาค 3 ทั้งสองฝั่ง')}${ck('bw_bad','ดีสุด / แย่สุด · % ไม่ปกติ','ต่ำ = ดี')}${ck('cars','รายการรถ','Excel: ผลตรวจทุกคัน · แบบอื่น: เฉพาะคันที่ไม่ปกติ')}</div>
+  <p class="eyebrow" style="margin:12px 0 4px">2. ส่งออก</p>
+  <div class="xgrid"><button type="button" class="btn alt" data-ex="xlsx">Excel</button><button type="button" class="btn alt" data-ex="pptx">PowerPoint</button><button type="button" class="btn alt" data-ex="png">รูป PNG ยาว</button><button type="button" class="btn alt" data-ex="txt">ข้อความ (LINE)</button></div>
+  <button type="button" class="btn gold" data-ex="ig" style="margin-top:10px;width:100%">${IC.chart}อินโฟกราฟิก 16:9 <small style="opacity:.8">(ไม่ต้องติ๊กหัวข้อ)</small></button>`);
+ sh.querySelectorAll('[data-sh]').forEach(b=>b.onchange=()=>{SH[b.dataset.sh]=b.checked?1:0});
+ sh.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>runExp(b.dataset.ex,b))}
+async function runExp(kind,btn){if(kind!=='ig'&&kind!=='txt'&&!Object.values(SH).some(Boolean))return toast('เลือกหัวข้ออย่างน้อย 1 หัวข้อ',true);
+ if(btn)btn.disabled=true;try{if(S.loadedMonth!==S.month){try{await loadRecs(S.month)}catch(e){}}const M=shModel(),tag=`${S.month}${M.z==='all'?'':'-'+M.z}`;
+  if(kind==='txt')await shareText(shText(M));
+  else if(kind==='xlsx')await expXlsx(M,tag);
+  else if(kind==='pptx')await expPptx(M,tag);
+  else if(kind==='png'){toast('กำลังสร้างรูป…');await saveBlob(await longPng(M),`NIMEX-Inspection-Summary-${tag}.png`)}
+  else if(kind==='ig'){toast('กำลังสร้างอินโฟกราฟิก…');await saveBlob(await infographic(M),`NIMEX-Inspection-Infographic-${tag}.png`)}}
+ catch(e){console.error(e);toast('ส่งออกไม่สำเร็จ: '+e.message,true)}finally{if(btn)btn.disabled=false}}
+async function expXlsx(M,tag){if(!window.XLSX)await loadJS('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+ const wb=XLSX.utils.book_new(),add=(name,aoa)=>{const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=aoa[0].map((h,i)=>({wch:Math.max(10,...aoa.slice(0,60).map(r=>String(r[i]??'').length+2))}));XLSX.utils.book_append_sheet(wb,ws,name.slice(0,31))};
+ add('ขอบเขต',[['หัวข้อ','ค่า'],['เดือน',M.ml],['ภาค',M.zl],['สร้างเมื่อ',dtLabel(new Date().toISOString())]]);
+ shTables(M).forEach(t=>{if(t.k==='cars'){const[h,rows,none]=carRows(M.cars);add('ผลตรวจรายคัน',[h,...rows]);add('ยังไม่ตรวจ',[['ภาค','DC','ทะเบียน','ชนิด','กลุ่ม'],...none]);return}
+  add(t.k==='kpi'?'KPI หลัก':t.k==='zone'?'รายภาค':t.k==='dc10'?'DC ไม่ปกติ 10 อันดับ':t.k==='grp'?'แยก AB-CC':t.k==='bw_done'?'ดีสุด-แย่สุด % ตรวจครบ':'ดีสุด-แย่สุด % ไม่ปกติ',[t.head,...(t.full||t.rows)])});
+ const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});await saveBlob(new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`NIMEX-Car-Inspection-${tag}.xlsx`)}
+async function expPptx(M,tag){if(!window.PptxGenJS){toast('กำลังโหลดตัวสร้าง PowerPoint…');await loadJS('https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js')}
+ const p=new PptxGenJS();p.layout='LAYOUT_WIDE';const FF='Prompt',logo=await dataUrl('logo.png');
+ const slide=(t)=>{const s=p.addSlide();s.background={color:'EEF2F9'};s.addShape(p.ShapeType.rect,{x:0,y:0,w:13.33,h:0.95,fill:{color:'0A2A5E'},line:{color:'0A2A5E'}});s.addShape(p.ShapeType.rect,{x:0,y:0.95,w:13.33,h:0.06,fill:{color:'D4AF37'},line:{color:'D4AF37'}});
+  s.addShape(p.ShapeType.roundRect,{x:0.25,y:0.12,w:1.5,h:0.72,fill:{color:'FFFFFF'},line:{color:'FFFFFF'},rectRadius:0.1});if(logo)s.addImage({data:logo,x:0.32,y:0.16,w:1.36,h:0.64,sizing:{type:'contain',w:1.36,h:0.64}});
+  s.addText(t,{x:1.95,y:0.1,w:11,h:0.5,fontFace:FF,fontSize:24,bold:true,color:'FFFFFF'});s.addText(`ตรวจสภาพรถประจำเดือน ${M.ml} · ${M.zl}`,{x:1.95,y:0.55,w:11,h:0.35,fontFace:FF,fontSize:13,color:'E6D79C'});return s};
+ const T=shTables(M);
+ if(SH.kpi){const s=slide('สรุปตรวจสภาพรถ');const A=M.A;SUMK.forEach(([k,l,bar],i)=>{const X=0.4+(i%4)*3.15,Y=1.35+Math.floor(i/4)*2.75,bad=i>=3;
+  s.addShape(p.ShapeType.roundRect,{x:X,y:Y,w:2.95,h:2.45,fill:{color:'FFFFFF'},line:{color:'DBE3F0'},rectRadius:0.12});s.addShape(p.ShapeType.rect,{x:X,y:Y+2.35,w:2.95,h:0.1,fill:{color:bad?'B8334A':bar.slice(1).toUpperCase()},line:{type:'none'}});
+  s.addText(l,{x:X,y:Y+0.15,w:2.95,h:0.45,align:'center',fontFace:FF,fontSize:15,color:'55657F'});s.addText(fmt(A[k].T)+' คัน',{x:X,y:Y+0.6,w:2.95,h:0.85,align:'center',fontFace:FF,fontSize:36,bold:true,color:bad&&A[k].T?'B8334A':'0B1F3F'});
+  s.addText(`AB ${A[k].AB} · CC ${A[k].CC}`,{x:X,y:Y+1.45,w:2.95,h:0.4,align:'center',fontFace:FF,fontSize:13,color:'55657F'});
+  const sub=k==='all'?'':k==='done'?pctS(A.done.T,A.all.T)+' ของรถทั้งหมด':pctS(A[k].T,A.done.T)+' ของที่ตรวจครบ';if(sub)s.addText(sub,{x:X,y:Y+1.82,w:2.95,h:0.4,align:'center',fontFace:FF,fontSize:12,color:'7A8AA5'})})}
+ T.filter(t=>t.k!=='kpi').forEach(t=>{const s=slide(t.t);if(!t.rows.length){s.addText(t.empty||'ไม่มีข้อมูล',{x:0.5,y:3,w:12.3,h:1,align:'center',fontFace:FF,fontSize:20,color:'55657F'});return}
+  const hd=t.head.map(x=>({text:String(x),options:{bold:true,color:'FFFFFF',fill:{color:'0A2A5E'},align:'center'}}));
+  const rows=t.rows.map(r=>r.map((v,i)=>({text:String(v??''),options:{color:cellBad(t,r,i)?'B8334A':'0B1F3F',bold:cellBad(t,r,i)||(t.k==='zone'&&r[0]==='รวมทั้งประเทศ'),align:i===0||/ชื่อ|DC|ภาค|สิ่งที่|ผู้ตรวจ|ทะเบียน/.test(t.head[i])?'left':'center'}})));
+  s.addTable([hd,...rows],{x:0.4,y:1.25,w:12.5,fontFace:FF,fontSize:t.head.length>8?11:12,border:{type:'solid',pt:0.5,color:'DBE3F0'},fill:{color:'FFFFFF'},autoPage:true,autoPageRepeatHeader:true,autoPageLineWeight:0.5,newSlideStartY:1.25});
+  if(t.note)s.addText(t.note,{x:0.4,y:7.0,w:12.5,h:0.35,fontFace:FF,fontSize:11,color:'55657F'})});
+ const blob=await p.write({outputType:'blob'});await saveBlob(blob,`NIMEX-Car-Inspection-${tag}.pptx`)}
+async function dataUrl(src){try{const b=await(await fetch(src)).blob();return await new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)})}catch(e){return null}}
+/* red only for problems: abnormal counts above zero, and the "แย่สุด" side of best / worst */
+function cellBad(t,r,i){const h=t.head[i];if(t.k==='kpi')return t.bad(r)&&i>0&&i<4&&+r[i]>0;if(/^bw_/.test(t.k))return r[1]==='แย่สุด'&&(i===1||i===4);if(t.k==='cars')return i===4;
+ return['ไม่ปกติ','% ไม่ปกติ','กล้อง','ยาง','รอบคัน','ภายในตู้'].includes(h)&&parseFloat(r[i])>0}
+/* long PNG (1240 px wide) of every ticked topic, canvas + Prompt font */
+async function longPng(M){try{await document.fonts.load('600 30px Prompt');await document.fonts.load('400 20px Prompt')}catch(e){}
+ const T=shTables(M),W=1240,PAD=32,RH=46,F=(w,s)=>`${w} ${s}px Prompt, sans-serif`;
+ const meas=document.createElement('canvas').getContext('2d');
+ const layout=t=>{const rows=t.k==='kpi'?[]:t.rows.slice(0,60),cols=t.head.map((h,i)=>{meas.font=F(500,19);return Math.max(meas.measureText(String(h)).width,...rows.map(r=>meas.measureText(String(r[i]??'')).width))+28});
+  const sum=cols.reduce((a,b)=>a+b,0),avail=W-2*PAD-32;return{rows,cols:cols.map(c=>c*avail/sum),h:t.k==='kpi'?70+2*166+(t.note?40:0)+6:70+RH+Math.max(1,rows.length)*RH+(t.rows.length>60?40:0)+(t.note?36:0)+20}};
+ const L=T.map(layout),H=170+L.reduce((a,l)=>a+l.h+24,0)+50;
+ const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d'),rr=(X,Y,w,h,r)=>{x.beginPath();x.roundRect(X,Y,w,h,r)};
+ const text=(t,X,Y,font,col,al='left',max)=>{x.font=font;x.fillStyle=col;x.textAlign=al;x.textBaseline='middle';x.fillText(String(t),X,Y,max)};
+ x.fillStyle='#eef2f9';x.fillRect(0,0,W,H);x.fillStyle='#0a2a5e';x.fillRect(0,0,W,140);x.fillStyle='#d4af37';x.fillRect(0,140,W,5);
+ const logo=await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src='logo.png'});x.fillStyle='#fff';rr(PAD,22,190,96,14);x.fill();if(logo){const s=Math.min(170/logo.width,80/logo.height);x.drawImage(logo,PAD+(190-logo.width*s)/2,22+(96-logo.height*s)/2,logo.width*s,logo.height*s)}
+ text('สรุปตรวจสภาพรถประจำเดือน',PAD+214,58,F(600,36),'#fff');text(`${M.ml} · ${M.zl}`,PAD+214,104,F(500,24),'#e6d79c');
+ let Y=170;T.forEach((t,ti)=>{const l=L[ti];x.fillStyle='#fff';rr(PAD,Y,W-2*PAD,l.h,18);x.fill();x.strokeStyle='#dbe3f0';x.lineWidth=2;x.stroke();x.fillStyle='#d4af37';x.fillRect(PAD+(W-2*PAD)*0.3,Y,(W-2*PAD)*0.4,3);
+  text(t.t,PAD+20,Y+38,F(600,26),'#0b1f3f');let y=Y+70;const X0=PAD+16;
+  if(t.k==='kpi'){const A=M.A,cw=(W-2*PAD-32-3*12)/4;SUMK.forEach(([k,l,bar],i)=>{const X=X0+(i%4)*(cw+12),yy=y+Math.floor(i/4)*166,bad=i>=3;x.fillStyle='#123f8c';rr(X,yy,cw,150,14);x.fill();x.fillStyle=bad?'#b8334a':bar;x.fillRect(X,yy+142,cw,8);
+    text(l,X+cw/2,yy+26,F(500,18),'#d9c98a','center',cw-16);text(fmt(A[k].T),X+cw/2,yy+70,F(600,42),'#fff','center');text(`AB ${A[k].AB} · CC ${A[k].CC}`,X+cw/2,yy+108,F(400,17),'#cfdcf2','center');
+    const sub=k==='all'?'':k==='done'?pctS(A.done.T,A.all.T):pctS(A[k].T,A.done.T);if(sub)text(sub,X+cw/2,yy+130,F(400,15),'#cfdcf2','center')});y+=2*166;if(t.note)text(t.note,X0,y+14,F(400,16),'#55657f');Y+=l.h+24;return}
+  x.fillStyle='#0a2a5e';rr(X0,y,W-2*PAD-32,RH,10);x.fill();let cx=X0;t.head.forEach((h,i)=>{text(h,cx+l.cols[i]/2,y+RH/2,F(600,18),'#fff','center',l.cols[i]-8);cx+=l.cols[i]});y+=RH;
+  if(!l.rows.length){text(t.empty||'ไม่มีข้อมูล',W/2,y+RH/2,F(400,19),'#55657f','center');y+=RH}
+  l.rows.forEach((r,ri)=>{if(ri%2){x.fillStyle='#f5f7fb';x.fillRect(X0,y,W-2*PAD-32,RH)}cx=X0;const strong=t.k==='zone'&&ri===l.rows.length-1||t.k==='grp'&&ri===2;
+   r.forEach((v,i)=>{const left=i===0||/ชื่อ|DC|ภาค|สิ่งที่|ผู้ตรวจ|ทะเบียน/.test(t.head[i]);text(v??'',left?cx+12:cx+l.cols[i]/2,y+RH/2,F(cellBad(t,r,i)||strong?600:400,18),cellBad(t,r,i)?'#b8334a':r[1]==='ดีสุด'&&(i===1||i===4)?'#1d57b8':'#0b1f3f',left?'left':'center',l.cols[i]-16);cx+=l.cols[i]});y+=RH});
+  if(t.rows.length>60){text(`… และอีก ${t.rows.length-60} รายการ (ดูใน Excel)`,X0,y+20,F(400,17),'#55657f');y+=40}
+  if(t.note)text(t.note,X0,y+20,F(400,16),'#55657f');Y+=l.h+24});
+ text('NIMEX Car Inspection Monthly · สร้างเมื่อ '+dtLabel(new Date().toISOString()),W/2,H-26,F(400,16),'#7a8aa5','center');
+ return await new Promise(res=>c.toBlob(res,'image/png'))}
+/* 16:9 infographic: SVG 1920x1080 with the Prompt font and the logo inlined, turned into a PNG at 2x (no html2canvas) */
+async function infographic(M){const W=1920,H=1080,A=M.A,e=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+ let fcss='';try{fcss=(await(await fetch('fonts.css')).text()).replace(/font-display:swap;?/g,'')}catch(x){}const logo=await dataUrl('logo.png');
+ const NAVY='#0a2a5e',GOLD='#d4af37',INK='#0b1f3f',MUT='#55657f',BAD='#b8334a',BLUE='#1d57b8',AB='#b8860b',GREY='#c9d3e3';
+ let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><style>${fcss} text{font-family:Prompt,sans-serif}</style><rect width="${W}" height="${H}" fill="#eef2f9"/>`;
+ s+=`<rect width="${W}" height="120" fill="${NAVY}"/><rect y="120" width="${W}" height="6" fill="${GOLD}"/><rect x="28" y="16" width="200" height="88" rx="14" fill="#fff"/>${logo?`<image href="${logo}" x="38" y="22" width="180" height="76" preserveAspectRatio="xMidYMid meet"/>`:''}`;
+ s+=`<text x="256" y="64" font-size="42" font-weight="600" fill="#fff">สรุปตรวจสภาพรถประจำเดือน</text><text x="258" y="102" font-size="22" fill="#e6d79c">${e(M.ml)} · ${e(M.zl)} · ข้อมูล ณ ${e(dtLabel(new Date().toISOString()))}</text>`;
+ s+=`<text x="${W-40}" y="72" font-size="26" font-weight="600" fill="#fff" text-anchor="end">ตรวจครบ ${pctS(A.done.T,A.all.T)}</text>`;
+ /* KPI cards: 8 in one row */
+ const cw=(W-80-7*14)/8;SUMK.forEach(([k,l,bar],i)=>{const X=40+i*(cw+14),bad=i>=3,sub=k==='all'?`AB ${A[k].AB} · CC ${A[k].CC}`:(k==='done'?pctS(A.done.T,A.all.T)+' ของทั้งหมด':pctS(A[k].T,A.done.T)+' ของที่ตรวจครบ');
+  s+=`<rect x="${X}" y="146" width="${cw}" height="168" rx="16" fill="${i<4?'#123f8c':'#fff'}" stroke="${i<4?'none':'#dbe3f0'}"/><rect x="${X}" y="306" width="${cw}" height="8" fill="${bad?BAD:bar}"/>`+
+  `<text x="${X+cw/2}" y="184" font-size="21" fill="${i<4?'#d9c98a':MUT}" text-anchor="middle">${e(l)}</text><text x="${X+cw/2}" y="242" font-size="50" font-weight="600" fill="${i<4?'#fff':bad&&A[k].T?BAD:INK}" text-anchor="middle">${fmt(A[k].T)}</text>`+
+  `<text x="${X+cw/2}" y="280" font-size="18" fill="${i<4?'#cfdcf2':MUT}" text-anchor="middle">${e(k==='all'?sub:`AB ${A[k].AB} · CC ${A[k].CC}`)}</text>${k==='all'?'':`<text x="${X+cw/2}" y="300" font-size="15" fill="${i<4?'#cfdcf2':MUT}" text-anchor="middle">${e(sub)}</text>`}`});
+ const panel=(X,Y,w,h,t,sub)=>`<rect x="${X}" y="${Y}" width="${w}" height="${h}" rx="18" fill="#fff" stroke="#dbe3f0"/><rect x="${X+w*0.25}" y="${Y}" width="${w*0.5}" height="3" fill="${GOLD}"/><text x="${X+24}" y="${Y+42}" font-size="26" font-weight="600" fill="${INK}">${e(t)}</text>${sub?`<text x="${X+w-24}" y="${Y+42}" font-size="17" fill="${MUT}" text-anchor="end">${e(sub)}</text>`:''}`;
+ const legend=(X,Y,items)=>items.map(([c,l],i)=>`<rect x="${X+i*150}" y="${Y-12}" width="16" height="16" rx="4" fill="${c}"/><text x="${X+i*150+24}" y="${Y+2}" font-size="17" fill="${MUT}">${e(l)}</text>`).join('');
+ /* rows spread over the whole panel so a short list never leaves a half-empty card */
+ const bars=(X,Y,w,h,items,series,fmtv,max)=>{const n=Math.max(items.length,1),slot=(h-24)/n,per=series.length,bh=Math.min(per>1?26:40,(slot-14)/per),lw=210,bw=w-lw-150;let o='';
+  const mx=max||Math.max(1,...items.flatMap(it=>series.map(sr=>sr[1](it))));
+  items.forEach((it,i)=>{const y0=Y+i*slot+(slot-bh*per-(per-1)*4)/2;o+=`<text x="${X+20}" y="${y0+(bh*per+(per-1)*4)/2+7}" font-size="20" fill="#33445f">${e(String(it[0]).slice(0,16))}</text>`;
+   series.forEach(([col,f],j)=>{const v=f(it),bw2=Math.max(v>0?3:0,v/mx*bw),y=y0+j*(bh+4);o+=`<rect x="${X+lw}" y="${y}" width="${bw}" height="${bh}" rx="5" fill="#f1f4fa"/><rect x="${X+lw}" y="${y}" width="${bw2}" height="${bh}" rx="5" fill="${col}"/><text x="${X+lw+bw+12}" y="${y+bh/2+7}" font-size="${per>1?17:20}" font-weight="600" fill="${INK}">${e(fmtv(v,it,j))}</text>`})});
+  if(!items.length)o+=`<text x="${X+w/2}" y="${Y+h/2}" font-size="22" fill="${MUT}" text-anchor="middle">ไม่มีข้อมูล</text>`;return o};
+ const PX=[40,970],PY=[340,690],PW=910,PH=330;
+ /* 1 abnormal by category (region filter applies) */
+ const catItems=SUMK.slice(4).map(([k,l])=>[l.replace(' หน้า-หลัง',''),A[k]]);
+ s+=panel(PX[0],PY[0],PW,PH,'รถไม่ปกติ แยกตามหมวด',M.zl)+legend(PX[0]+PW-330,PY[0]+80,[[AB,'AB รถแห้ง'],[BLUE,'CC รถเย็น']])+bars(PX[0]+10,PY[0]+96,PW-20,PH-112,catItems,[[AB,it=>it[1].AB],[BLUE,it=>it[1].CC]],(v)=>v+' คัน');
+ /* 2 abnormal cars per region, AB vs CC (all regions) */
+ s+=panel(PX[1],PY[0],PW,PH,'รถไม่ปกติรายภาค (AB / CC)','ทุกภาค')+legend(PX[1]+PW-330,PY[0]+80,[[AB,'AB รถแห้ง'],[BLUE,'CC รถเย็น']])+bars(PX[1]+10,PY[0]+96,PW-20,PH-112,M.zones,[[AB,it=>it[1].bad.AB],[BLUE,it=>it[1].bad.CC]],v=>v+' คัน');
+ /* 3 two related indicators per region */
+ s+=panel(PX[0],PY[1],PW,PH,'ตรวจครบ % และ ไม่ปกติ % รายภาค','ทุกภาค')+legend(PX[0]+PW-330,PY[1]+80,[[BLUE,'% ตรวจครบ'],[BAD,'% ไม่ปกติ']])+bars(PX[0]+10,PY[1]+96,PW-20,PH-112,M.zones,[[BLUE,it=>it[1].all.T?it[1].done.T/it[1].all.T*100:0],[BAD,it=>it[1].done.T?it[1].bad.T/it[1].done.T*100:0]],(v,it,j)=>(Math.round(v*10)/10)+'%'+(j===0?` (${it[1].done.T}/${it[1].all.T})`:''),100);
+ /* 4 donut: normal / abnormal / not done + 3 worst DCs */
+ {const X=PX[1],Y=PY[1],cx=X+190,cy=Y+190,R=105,tot=Math.max(1,A.all.T),seg=[[A.ok.T,BLUE,'ปกติ'],[A.bad.T,BAD,'ไม่ปกติ'],[A.all.T-A.done.T,GREY,'ยังไม่ตรวจ/ไม่ครบ']];let a0=-Math.PI/2;
+  s+=panel(X,Y,PW,PH,'สัดส่วนผลตรวจ + DC ไม่ปกติสูงสุด',M.zl)+`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#e9eef7" stroke-width="40"/>`;
+  seg.forEach(([v,col])=>{if(!v)return;const a1=a0+v/tot*2*Math.PI;if(v>=tot){s+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${col}" stroke-width="40"/>`}else s+=`<path d="M ${cx+R*Math.cos(a0)} ${cy+R*Math.sin(a0)} A ${R} ${R} 0 ${a1-a0>Math.PI?1:0} 1 ${cx+R*Math.cos(a1)} ${cy+R*Math.sin(a1)}" fill="none" stroke="${col}" stroke-width="40"/>`;a0=a1});
+  s+=`<text x="${cx}" y="${cy+4}" font-size="40" font-weight="600" fill="${INK}" text-anchor="middle">${fmt(A.all.T)}</text><text x="${cx}" y="${cy+36}" font-size="18" fill="${MUT}" text-anchor="middle">คัน</text>`;
+  seg.forEach(([v,col,l],i)=>{s+=`<rect x="${X+350}" y="${Y+80+i*38}" width="18" height="18" rx="4" fill="${col}"/><text x="${X+378}" y="${Y+95+i*38}" font-size="19" fill="#33445f">${e(l)} ${fmt(v)} คัน (${pctS(v,A.all.T)})</text>`});
+  s+=`<text x="${X+350}" y="${Y+214}" font-size="20" font-weight="600" fill="${INK}">DC ไม่ปกติสูงสุด 3 อันดับ</text>`;
+  const w3=M.dc10.slice(0,3);if(!w3.length)s+=`<text x="${X+350}" y="${Y+250}" font-size="19" fill="${MUT}">ไม่มี DC ที่พบรถไม่ปกติ</text>`;
+  w3.forEach(([n,,a],i)=>{s+=`<text x="${X+350}" y="${Y+250+i*30}" font-size="19" fill="#33445f">${i+1}. ${e(n)}</text><text x="${X+PW-28}" y="${Y+250+i*30}" font-size="19" font-weight="600" fill="${BAD}" text-anchor="end">${a.bad.T}/${a.done.T} คัน · ${pctS(a.bad.T,a.done.T)}</text>`})}
+ s+=`<text x="40" y="1056" font-size="17" fill="${MUT}">ไม่ปกติ = มีข้อผิดปกติ หรือ "พบความผิดปกติ" หรือยางอายุ ${MAXY} ปีขึ้นไป · % ไม่ปกติ คิดจากรถที่ตรวจครบ · % ตรวจครบ คิดจากรถทั้งหมด · สีทอง = AB · สีน้ำเงิน = CC</text></svg>`;
+ const url=URL.createObjectURL(new Blob([s],{type:'image/svg+xml;charset=utf-8'}));try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('สร้างภาพไม่สำเร็จ'));i.src=url});
+  const c=document.createElement('canvas');c.width=W*2;c.height=H*2;const x=c.getContext('2d');x.scale(2,2);x.drawImage(img,0,0);return await new Promise(res=>c.toBlob(res,'image/png'))}finally{URL.revokeObjectURL(url)}}
+function carRows(cars){
+ const recs=cars.map(c=>[c,S.pend[S.month+'|'+c.pl]||S.recs[c.pl]]);const link=r=>{const id=driveId(r);return id?`https://drive.google.com/file/d/${id}/view`:''};
  const head=['เดือน','ภาค','DC','ทะเบียน','ชนิด','กลุ่ม','ผู้ตรวจ','เลขไมล์','สถานะ','ผล','รายการผิดปกติ','รายละเอียดความผิดปกติ',...TY.map(t=>'ปียาง '+t[1]),'ยางเก่า',...CHECKS.map(c=>c[1]),'กล้องหน้ารถ','บันทึกล่าสุด',...PHOTO.flatMap(p=>p.s.map(s=>'รูป '+s[1])),'รูปจุดผิดปกติ','ใบเคลม'];
  const rows=recs.filter(x=>x[1]).map(([c,r])=>[mLabel(r.month),(S.dcs[c.dc]||{}).zone||'',dcName(c.dc),c.pl,TYN[c.ty]||c.ty,GRP[c.g]||c.g,r.inspector,r.mile?+r.mile:'',r.status==='done'?'ครบ':'ยังไม่ครบ',r.result==='issue'?'ผิดปกติ':'ปกติ',
   badList(r).map(k=>CKL[k]+(r.checks[k].n?' ('+r.checks[k].n+')':'')).join(', '),r.issue.v==='has'?r.issue.t:'',...TY.map(([k])=>r.tyres[k]||''),tyreOld(r.tyres)?'ใช่':'',
   ...CHECKS.map(([k])=>!r.checks[k]||!r.checks[k].v?'':r.checks[k].v==='ok'?'ปกติ':'ผิดปกติ'+(r.checks[k].n?': '+r.checks[k].n:'')),CAML[camS(r)]||'',dtLabel(r.updated),...PHOTO.flatMap(p=>p.s.map(([k])=>link(r.photos[k]))),r.photos.damage.map(link).join(' '),r.photos.claim.map(link).join(' ')]);
  const none=recs.filter(x=>!x[1]).map(([c])=>[(S.dcs[c.dc]||{}).zone||'',dcName(c.dc),c.pl,TYN[c.ty]||c.ty,GRP[c.g]||c.g]);
- const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet([head,...rows]);ws['!cols']=head.map((h,i)=>({wch:i<12?Math.max(10,h.length+2):14}));XLSX.utils.book_append_sheet(wb,ws,'ผลตรวจ');
- XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['ภาค','DC','ทะเบียน','ชนิด','กลุ่ม'],...none]),'ยังไม่ตรวจ');
- XLSX.writeFile(wb,`NIMEX-Car-Inspection-Monthly-${S.month}.xlsx`)}
+ return[head,rows,none]}
 
 /* ---------- admin: required / optional + notes for inspectors ---------- */
 function viewSet(){$('#ttl').textContent='ตั้งค่าฟอร์มตรวจ';$('#sub').textContent='เฉพาะผู้ดูแล · มีผลกับผู้ตรวจทุกคน';
